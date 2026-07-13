@@ -65,14 +65,27 @@ export async function getDbTableAsync<T>(tableName: string): Promise<T[]> {
     
     // Select correct table mappings
     if (tableName === 'job_requests') {
-      const { data, error } = await supabase.from('job_requests').select('*').order('created_at', { ascending: false })
-      if (!error && data && data.length > 0) return data as unknown as T[]
+      const { data, error } = await supabase.from('bookings').select('*').order('created_at', { ascending: false })
+      if (!error && data && data.length > 0) {
+        const mapped = data.map((r: any) => ({
+          ...r,
+          final_price: r.price
+        }))
+        return mapped as unknown as T[]
+      }
     } else if (tableName === 'technician_status') {
       const { data, error } = await supabase.from('technician_status').select('*')
       if (!error && data && data.length > 0) return data as unknown as T[]
     } else if (tableName === 'chat_messages') {
-      const { data, error } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true })
-      if (!error && data && data.length > 0) return data as unknown as T[]
+      const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: true })
+      if (!error && data && data.length > 0) {
+        const mapped = data.map((r: any) => ({
+          ...r,
+          user_id: r.sender_id,
+          content: r.message
+        }))
+        return mapped as unknown as T[]
+      }
     }
   } catch (e) {
     console.warn(`Supabase query failed for ${tableName}, falling back to localStorage`, e)
@@ -98,17 +111,22 @@ export function saveDbTable<T>(tableName: string, rows: T[]) {
         const mapped = rows.map((r: any) => ({
           id: r.id.startsWith('REQ-') || r.id.startsWith('JOB-') ? undefined : r.id, // Skip mock IDs if uuid format is strict
           customer_id: r.customer_id === 'CUST-1' ? '00000000-0000-0000-0000-000000000000' : r.customer_id, // Default mock UUID helper
+          technician_id: r.technician_id === 'usman-khan' ? null : r.technician_id,
           service_category: r.service_category,
           lat: r.lat,
           lng: r.lng,
-          address: r.address,
+          address: r.address || r.location,
+          location: r.location || r.address,
           description: r.description || 'Job requested',
           status: r.status,
+          price_estimate_min: r.price_estimate_min,
+          price_estimate_max: r.price_estimate_max,
+          price: r.final_price || r.price,
           search_radius_km: r.search_radius_km,
         })).filter(r => r.id !== undefined)
         
         if (mapped.length > 0) {
-          await supabase.from('job_requests').upsert(mapped)
+          await supabase.from('bookings').upsert(mapped)
         }
       }
     } catch (e) {
@@ -131,24 +149,29 @@ export function insertDbRow<T>(tableName: string, newRow: T) {
         const userSession = await supabase.auth.getUser()
         const customerId = userSession.data.user?.id || '00000000-0000-0000-0000-000000000000'
         
-        await supabase.from('job_requests').insert({
+        await supabase.from('bookings').insert({
           customer_id: customerId,
+          technician_id: r.technician_id === 'usman-khan' ? null : r.technician_id,
           service_category: r.service_category,
           lat: r.lat,
           lng: r.lng,
-          address: r.address,
+          address: r.address || r.location,
+          location: r.location || r.address,
           description: r.description || 'No description',
           status: r.status,
+          price_estimate_min: r.price_estimate_min,
+          price_estimate_max: r.price_estimate_max,
+          price: r.final_price || r.price,
           search_radius_km: r.search_radius_km,
         })
       } else if (tableName === 'chat_messages') {
         const userSession = await supabase.auth.getUser()
         const userId = userSession.data.user?.id
         if (userId) {
-          await supabase.from('chat_messages').insert({
-            user_id: userId,
+          await supabase.from('messages').insert({
+            sender_id: userId,
             role: r.role,
-            content: r.content,
+            message: r.content,
           })
         }
       }
@@ -178,13 +201,13 @@ export function updateDbRow<T extends { id?: string; technician_id?: string }>(
       if (tableName === 'job_requests') {
         // Match both real UUID and mock IDs in local session
         await supabase
-          .from('job_requests')
+          .from('bookings')
           .update({
             status: u.status,
-            matched_technician_id: u.matched_technician_id,
-            search_radius_km: u.search_radius_km,
+            technician_id: u.matched_technician_id || u.technician_id,
+            price: u.final_price || u.price,
           })
-          .eq('service_category', u.service_category || 'plumbing') // Fallback mapping match
+          .eq('id', keyValue)
       } else if (tableName === 'technician_status') {
         await supabase
           .from('technician_status')
@@ -225,11 +248,12 @@ export function subscribeToDbTable(tableName: string, callback: () => void) {
 
   // 2. Realtime WebSocket Subscription to Supabase Postgres Changes
   const supabase = createBrowserClient()
+  const realTable = tableName === 'job_requests' ? 'bookings' : (tableName === 'chat_messages' ? 'messages' : tableName)
   const channel = supabase
     .channel(`public_changes_${tableName}`)
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: tableName },
+      { event: '*', schema: 'public', table: realTable },
       () => {
         callback()
       }
