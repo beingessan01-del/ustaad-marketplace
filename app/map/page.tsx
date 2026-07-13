@@ -19,6 +19,7 @@ import {
 } from '@/lib/data'
 import {
   getDbTable,
+  getDbTableAsync,
   saveDbTable,
   type TechnicianStatus,
 } from '@/lib/storage-sync'
@@ -56,36 +57,33 @@ function MapPageContent() {
     carpentry: 'bg-[#F5A623] text-white',
   }
 
-  // Populate technician statuses on mount if empty, then load online ones
+  // Populate technician statuses, fetching from Supabase first
   useEffect(() => {
-    const statuses = getDbTable<TechnicianStatus>('technician_status')
+    const loadOnlineTechs = async () => {
+      const statuses = await getDbTableAsync<TechnicianStatus>('technician_status')
 
-    if (statuses.length === 0) {
-      // Set all technicians online by default in mock DB for maps browsing
-      const initialStatuses = technicians.map((t) => ({
-        technician_id: t.id,
-        is_online: t.status === 'available', // available techs are online
-        current_lat: 33.7294,
-        current_lng: 73.0561,
-        last_ping_at: Date.now(),
-        active_job_id: null,
-      }))
-      saveDbTable('technician_status', initialStatuses)
-    }
-
-    const loadOnlineTechs = () => {
-      const currentStatuses = getDbTable<TechnicianStatus>('technician_status')
-      const onlineIds = currentStatuses
-        .filter((s) => s.is_online)
-        .map((s) => s.technician_id)
-
-      // Usman Khan and others from default technicians
-      const matched = technicians.filter((t) => onlineIds.includes(t.id) || t.status === 'available')
-      setOnlineTechs(matched)
+      if (statuses.length === 0) {
+        const initialStatuses = technicians.map((t) => ({
+          technician_id: t.id,
+          is_online: t.status === 'available',
+          current_lat: 33.7294,
+          current_lng: 73.0561,
+          last_ping_at: Date.now(),
+          active_job_id: null,
+        }))
+        saveDbTable('technician_status', initialStatuses)
+        const onlineIds = initialStatuses.filter(s => s.is_online).map(s => s.technician_id)
+        const matched = technicians.filter((t) => onlineIds.includes(t.id) || t.status === 'available')
+        setOnlineTechs(matched)
+      } else {
+        const onlineIds = statuses.filter((s) => s.is_online).map((s) => s.technician_id)
+        const matched = technicians.filter((t) => onlineIds.includes(t.id) || t.status === 'available')
+        setOnlineTechs(matched)
+      }
       setLoading(false)
     }
 
-    const timer = setTimeout(loadOnlineTechs, 600) // Mock loading skeleton
+    const timer = setTimeout(loadOnlineTechs, 600)
     return () => clearTimeout(timer)
   }, [])
 

@@ -7,6 +7,7 @@ import { ArrowLeft, Phone, User, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
+import { createClient } from '@/lib/supabase/client'
 
 type Mode = 'login' | 'signup'
 type AccountType = 'customer' | 'technician'
@@ -14,34 +15,106 @@ type Step = 'phone' | 'otp'
 
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter()
+  const supabase = createClient()
+  
   const [step, setStep] = useState<Step>('phone')
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [accountType, setAccountType] = useState<AccountType>('customer')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
   const isSignup = mode === 'signup'
   const phoneValid = phone.replace(/\D/g, '').length >= 10
 
-  function handleSendOtp(e: React.FormEvent) {
+  async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault()
     if (!phoneValid) return
-    setStep('otp')
+    setErrorMsg(null)
+    setLoading(true)
+
+    // Format phone to E.164: +923001234567
+    const cleanedPhone = phone.replace(/\D/g, '')
+    const formattedPhone = `+92${cleanedPhone.startsWith('92') ? cleanedPhone.slice(2) : (cleanedPhone.startsWith('0') ? cleanedPhone.slice(1) : cleanedPhone)}`
+
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: formattedPhone,
+      })
+
+      if (error) {
+        setErrorMsg(error.message)
+      } else {
+        setStep('otp')
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to send OTP')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  function handleVerify(e: React.FormEvent) {
+  async function handleVerify(e: React.FormEvent) {
     e.preventDefault()
     if (otp.length < 6) return
-    localStorage.setItem('ustad_account_type', accountType)
-    if (accountType === 'technician') {
-      router.push('/technician-dashboard')
-    } else {
-      router.push('/home')
+    setErrorMsg(null)
+    setLoading(true)
+
+    const cleanedPhone = phone.replace(/\D/g, '')
+    const formattedPhone = `+92${cleanedPhone.startsWith('92') ? cleanedPhone.slice(2) : (cleanedPhone.startsWith('0') ? cleanedPhone.slice(1) : cleanedPhone)}`
+
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone: formattedPhone,
+        token: otp,
+        type: 'sms',
+      })
+
+      if (error) {
+        setErrorMsg(error.message)
+        setLoading(false)
+        return
+      }
+
+      // Upsert profiles details into profiles table
+      if (data.user) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: data.user.id,
+            name: isSignup ? 'New User' : (data.user.user_metadata?.name || 'User'),
+            phone: formattedPhone,
+            account_type: accountType,
+          })
+
+        if (profileError) {
+          console.error('Error saving profile:', profileError.message)
+        }
+      }
+
+      localStorage.setItem('ustad_account_type', accountType)
+      
+      if (accountType === 'technician') {
+        router.push('/technician-dashboard')
+      } else {
+        router.push('/home')
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Verification failed')
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
     <div className="w-full max-w-[400px]">
       <div className="rounded-3xl border border-border bg-card p-6 soft-shadow sm:p-8">
+        {errorMsg && (
+          <div className="mb-4 text-xs font-semibold text-destructive bg-destructive/5 border border-destructive/20 rounded-xl p-3 leading-normal">
+            {errorMsg}
+          </div>
+        )}
+
         {step === 'phone' ? (
           <>
             <div className="mb-6 flex flex-col gap-1.5">
@@ -96,6 +169,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
                     autoComplete="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                    disabled={loading}
                     placeholder="300 1234567"
                     className="h-11 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
                   />
@@ -105,10 +179,10 @@ export function AuthForm({ mode }: { mode: Mode }) {
               <Button
                 type="submit"
                 size="lg"
-                disabled={!phoneValid}
+                disabled={!phoneValid || loading}
                 className="tap h-11 w-full"
               >
-                Send OTP
+                {loading ? 'Sending...' : 'Send OTP'}
               </Button>
             </form>
           </>
@@ -117,7 +191,8 @@ export function AuthForm({ mode }: { mode: Mode }) {
             <button
               type="button"
               onClick={() => setStep('phone')}
-              className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              disabled={loading}
+              className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
             >
               <ArrowLeft className="size-4" />
               Back
@@ -138,6 +213,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
                 maxLength={6}
                 value={otp}
                 onChange={setOtp}
+                disabled={loading}
                 containerClassName="justify-between"
               >
                 <InputOTPGroup className="flex w-full justify-between gap-2">
@@ -154,34 +230,32 @@ export function AuthForm({ mode }: { mode: Mode }) {
               <Button
                 type="submit"
                 size="lg"
-                disabled={otp.length < 6}
+                disabled={otp.length < 6 || loading}
                 className="tap h-11 w-full"
               >
-                Verify &amp; continue
+                {loading ? 'Verifying...' : 'Verify & continue'}
               </Button>
-
-              <p className="text-center text-sm text-muted-foreground">
-                Didn&apos;t get the code?{' '}
-                <button
-                  type="button"
-                  className="font-medium text-primary hover:underline"
-                >
-                  Resend
-                </button>
-              </p>
             </form>
           </>
         )}
       </div>
 
-      <p className="mt-5 text-center text-sm text-muted-foreground">
-        {isSignup ? 'Already have an account?' : "Don't have an account?"}{' '}
-        <Link
-          href={isSignup ? '/login' : '/signup'}
-          className="font-medium text-primary hover:underline"
-        >
-          {isSignup ? 'Log in' : 'Sign up'}
-        </Link>
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        {isSignup ? (
+          <>
+            Already have an account?{' '}
+            <Link href="/login" className="font-medium text-primary hover:underline">
+              Log in
+            </Link>
+          </>
+        ) : (
+          <>
+            Don't have an account?{' '}
+            <Link href="/signup" className="font-medium text-primary hover:underline">
+              Sign up
+            </Link>
+          </>
+        )}
       </p>
     </div>
   )
@@ -194,7 +268,7 @@ function AccountTypeOption({
   active,
   onClick,
 }: {
-  icon: typeof User
+  icon: any
   label: string
   description: string
   active: boolean
@@ -205,22 +279,15 @@ function AccountTypeOption({
       type="button"
       onClick={onClick}
       className={cn(
-        'tap flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left',
-        active
-          ? 'border-primary bg-primary/5'
-          : 'border-border bg-card hover:bg-muted',
+        'tap flex flex-col items-center gap-1.5 rounded-2xl border bg-card p-3 text-center transition-colors',
+        active ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground hover:bg-muted/50'
       )}
     >
-      <span
-        className={cn(
-          'flex size-8 items-center justify-center rounded-lg',
-          active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
-        )}
-      >
-        <Icon className="size-4" />
-      </span>
-      <span className="text-sm font-semibold text-foreground">{label}</span>
-      <span className="text-xs text-muted-foreground">{description}</span>
+      <Icon className="size-5" />
+      <div>
+        <p className="text-xs font-semibold">{label}</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">{description}</p>
+      </div>
     </button>
   )
 }

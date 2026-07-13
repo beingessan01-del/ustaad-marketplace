@@ -30,6 +30,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useTranslation } from '@/lib/i18n'
 import {
   getDbTable,
+  getDbTableAsync,
   insertDbRow,
   type JobRequest,
 } from '@/lib/storage-sync'
@@ -68,7 +69,7 @@ export default function ChatPage() {
     carpentry: Hammer,
   }
 
-  // Populate initial context and history on mount
+  // Populate initial context and history on mount, querying Supabase first
   useEffect(() => {
     // 1. Check rate limits
     const today = new Date().toDateString()
@@ -87,20 +88,33 @@ export default function ChatPage() {
     }
 
     // 2. Load prior conversation context
-    const storedMessages = localStorage.getItem('ustad_chat_history')
-    if (storedMessages) {
-      setMessages(JSON.parse(storedMessages))
-    } else {
-      // Intro greetings
-      const defaultGreeting: Message = {
-        id: 'welcome',
-        role: 'assistant',
-        content: locale === 'ur' 
-          ? 'السلام علیکم! میں استاد کا لائیو چیٹ اسسٹنٹ ہوں۔ میں آپ کی بکنگ، قیمتوں کے اندازے اور قریبی ٹیکنیشنز تلاش کرنے میں مدد کر سکتا ہوں۔ میں آج آپ کی کیا مدد کروں؟'
-          : 'Asalam-o-Alaikum! I am the USTAD AI Assistant. I can help you check service prices, find available technicians, or prepare a booking card. What can I do for you today?',
+    const loadHistory = async () => {
+      const currentList = await getDbTableAsync<any>('chat_messages')
+      if (currentList && currentList.length > 0) {
+        const mapped: Message[] = currentList.map((m: any) => ({
+          id: m.id || String(m.created_at || Math.random()),
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        }))
+        setMessages(mapped)
+      } else {
+        const storedMessages = localStorage.getItem('ustad_chat_history')
+        if (storedMessages) {
+          setMessages(JSON.parse(storedMessages))
+        } else {
+          const defaultGreeting: Message = {
+            id: 'welcome',
+            role: 'assistant',
+            content: locale === 'ur' 
+              ? 'السلام علیکم! میں استاد کا لائیو چیٹ اسسٹنٹ ہوں۔ میں آپ کی بکنگ، قیمتوں کے اندازے اور قریبی ٹیکنیشنز تلاش کرنے میں مدد کر سکتا ہوں۔ میں آج آپ کی کیا مدد کروں؟'
+              : 'Asalam-o-Alaikum! I am the USTAD AI Assistant. I can help you check service prices, find available technicians, or prepare a booking card. What can I do for you today?',
+          }
+          setMessages([defaultGreeting])
+        }
       }
-      setMessages([defaultGreeting])
     }
+    
+    loadHistory()
   }, [])
 
   // Auto-scroll to bottom

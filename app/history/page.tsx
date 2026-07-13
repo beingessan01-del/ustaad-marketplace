@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   getDbTable,
+  getDbTableAsync,
   saveDbTable,
   updateDbRow,
   insertDbRow,
@@ -85,63 +86,61 @@ function HistoryPageContent() {
     carpentry: 'bg-[#FFF0EE] text-warning',
   }
 
-  // Populate mock history on mount if empty, then fetch
+  // Populate history, fetching from Supabase first
   useEffect(() => {
-    const list = getDbTable<JobRequest>('job_requests')
+    const loadJobs = async () => {
+      setLoading(true)
+      const currentList = await getDbTableAsync<JobRequest>('job_requests')
 
-    if (list.length === 0) {
-      // Setup some realistic completed/cancelled historical records
-      const mockHistory: JobRequest[] = [
-        {
-          id: 'JOB-9104',
-          customer_id: 'CUST-1',
-          service_category: 'plumbing',
-          lat: 33.7294,
-          lng: 73.0561,
-          address: 'House 42, Street 18, F-7/2, Islamabad',
-          status: 'completed',
-          created_at: Date.now() - 3 * 24 * 60 * 60 * 1000, // 3 days ago
-          matched_technician_id: 'usman-khan',
-          search_radius_km: 1.5,
-        },
-        {
-          id: 'JOB-8492',
-          customer_id: 'CUST-1',
-          service_category: 'electrical',
-          lat: 33.7294,
-          lng: 73.0561,
-          address: 'House 42, Street 18, F-7/2, Islamabad',
-          status: 'completed',
-          created_at: Date.now() - 15 * 24 * 60 * 60 * 1000, // 15 days ago
-          matched_technician_id: 'adnan-raza',
-          search_radius_km: 1.5,
-        },
-        {
-          id: 'JOB-4819',
-          customer_id: 'CUST-1',
-          service_category: 'carpentry',
-          lat: 33.7294,
-          lng: 73.0561,
-          address: 'House 42, Street 18, F-7/2, Islamabad',
-          status: 'cancelled',
-          created_at: Date.now() - 1 * 24 * 60 * 60 * 1000, // 1 day ago
-          matched_technician_id: 'naveed-akhtar',
-          search_radius_km: 1.5,
-        },
-      ]
-      saveDbTable('job_requests', mockHistory)
-    }
-
-    const loadJobs = () => {
-      const currentList = getDbTable<JobRequest>('job_requests')
-      // Sort newest first
-      const sorted = currentList.sort((a, b) => b.created_at - a.created_at)
-      setJobs(sorted)
+      if (currentList.length === 0) {
+        const mockHistory: JobRequest[] = [
+          {
+            id: 'JOB-9104',
+            customer_id: 'CUST-1',
+            service_category: 'plumbing',
+            lat: 33.7294,
+            lng: 73.0561,
+            address: 'House 42, Street 18, F-7/2, Islamabad',
+            status: 'completed',
+            created_at: Date.now() - 3 * 24 * 60 * 60 * 1000,
+            matched_technician_id: 'usman-khan',
+            search_radius_km: 1.5,
+          },
+          {
+            id: 'JOB-8492',
+            customer_id: 'CUST-1',
+            service_category: 'electrical',
+            lat: 33.7294,
+            lng: 73.0561,
+            address: 'House 42, Street 18, F-7/2, Islamabad',
+            status: 'completed',
+            created_at: Date.now() - 15 * 24 * 60 * 60 * 1000,
+            matched_technician_id: 'adnan-raza',
+            search_radius_km: 1.5,
+          },
+          {
+            id: 'JOB-4819',
+            customer_id: 'CUST-1',
+            service_category: 'carpentry',
+            lat: 33.7294,
+            lng: 73.0561,
+            address: 'House 42, Street 18, F-7/2, Islamabad',
+            status: 'cancelled',
+            created_at: Date.now() - 1 * 24 * 60 * 60 * 1000,
+            matched_technician_id: 'naveed-akhtar',
+            search_radius_km: 1.5,
+          },
+        ]
+        saveDbTable('job_requests', mockHistory)
+        setJobs(mockHistory)
+      } else {
+        const sorted = [...currentList].sort((a, b) => b.created_at - a.created_at)
+        setJobs(sorted)
+      }
       setLoading(false)
     }
 
-    const timer = setTimeout(loadJobs, 500)
-    return () => clearTimeout(timer)
+    loadJobs()
   }, [activeTab])
 
   // Filter jobs by active tab
