@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Phone, User, Wrench } from 'lucide-react'
+import { ArrowLeft, Mail, User, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
@@ -11,35 +11,31 @@ import { createClient } from '@/lib/supabase/client'
 
 type Mode = 'login' | 'signup'
 type AccountType = 'customer' | 'technician'
-type Step = 'phone' | 'otp'
+type Step = 'email' | 'otp'
 
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter()
   const supabase = createClient()
   
-  const [step, setStep] = useState<Step>('phone')
-  const [phone, setPhone] = useState('')
+  const [step, setStep] = useState<Step>('email')
+  const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [accountType, setAccountType] = useState<AccountType>('customer')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   const isSignup = mode === 'signup'
-  const phoneValid = phone.replace(/\D/g, '').length >= 10
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
   async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault()
-    if (!phoneValid) return
+    if (!emailValid) return
     setErrorMsg(null)
     setLoading(true)
 
-    // Format phone to E.164: +923001234567
-    const cleanedPhone = phone.replace(/\D/g, '')
-    const formattedPhone = `+92${cleanedPhone.startsWith('92') ? cleanedPhone.slice(2) : (cleanedPhone.startsWith('0') ? cleanedPhone.slice(1) : cleanedPhone)}`
-
     try {
       const { error } = await supabase.auth.signInWithOtp({
-        phone: formattedPhone,
+        email,
       })
 
       if (error) {
@@ -60,14 +56,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setErrorMsg(null)
     setLoading(true)
 
-    const cleanedPhone = phone.replace(/\D/g, '')
-    const formattedPhone = `+92${cleanedPhone.startsWith('92') ? cleanedPhone.slice(2) : (cleanedPhone.startsWith('0') ? cleanedPhone.slice(1) : cleanedPhone)}`
-
     try {
       const { data, error } = await supabase.auth.verifyOtp({
-        phone: formattedPhone,
+        email,
         token: otp,
-        type: 'sms',
+        type: 'email',
       })
 
       if (error) {
@@ -83,7 +76,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           .upsert({
             id: data.user.id,
             name: isSignup ? 'New User' : (data.user.user_metadata?.name || 'User'),
-            phone: formattedPhone,
+            email: email,
             account_type: accountType,
           })
 
@@ -93,6 +86,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       }
 
       localStorage.setItem('ustad_account_type', accountType)
+      localStorage.setItem('ustad_email', email)
       
       if (accountType === 'technician') {
         router.push('/technician-dashboard')
@@ -115,7 +109,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           </div>
         )}
 
-        {step === 'phone' ? (
+        {step === 'email' ? (
           <>
             <div className="mb-6 flex flex-col gap-1.5">
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -123,8 +117,8 @@ export function AuthForm({ mode }: { mode: Mode }) {
               </h1>
               <p className="text-sm text-muted-foreground">
                 {isSignup
-                  ? 'Sign up with your phone number to get started.'
-                  : 'Log in with your phone number to continue.'}
+                  ? 'Sign up with your email address to get started.'
+                  : 'Log in with your email address to continue.'}
               </p>
             </div>
 
@@ -154,23 +148,19 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
             <form onSubmit={handleSendOtp} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="phone" className="text-sm font-medium text-foreground">
-                  Phone number
+                <label htmlFor="email" className="text-sm font-medium text-foreground">
+                  Email address
                 </label>
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 focus-within:border-primary">
-                  <Phone className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="text-sm font-medium text-muted-foreground">
-                    +92
-                  </span>
+                  <Mail className="size-4 shrink-0 text-muted-foreground" />
                   <input
-                    id="phone"
-                    type="tel"
-                    inputMode="numeric"
-                    autoComplete="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     disabled={loading}
-                    placeholder="300 1234567"
+                    placeholder="you@example.com"
                     className="h-11 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
                   />
                 </div>
@@ -179,7 +169,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
               <Button
                 type="submit"
                 size="lg"
-                disabled={!phoneValid || loading}
+                disabled={!emailValid || loading}
                 className="tap h-11 w-full"
               >
                 {loading ? 'Sending...' : 'Send OTP'}
@@ -190,7 +180,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           <>
             <button
               type="button"
-              onClick={() => setStep('phone')}
+              onClick={() => setStep('email')}
               disabled={loading}
               className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
             >
@@ -204,7 +194,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
               </h1>
               <p className="text-sm text-muted-foreground">
                 We sent a 6-digit code to{' '}
-                <span className="font-medium text-foreground">+92 {phone}</span>
+                <span className="font-medium text-foreground">{email}</span>
               </p>
             </div>
 

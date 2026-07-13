@@ -23,17 +23,17 @@
   "auth": {
     "create_account": "نیا اکاؤنٹ بنائیں",
     "welcome_back": "خوش آمدید",
-    "signup_desc": "شروع کرنے کے لیے اپنے فون نمبر کے ساتھ سائن اپ کریں۔",
-    "login_desc": "جاری رکھنے کے لیے اپنے فون نمبر کے ساتھ لاگ ان کریں۔",
+    "signup_desc": "شروع کرنے کے لیے اپنے ای میل ایڈریس کے ساتھ سائن اپ کریں۔",
+    "login_desc": "جاری رکھنے کے لیے اپنے ای میل ایڈریس کے ساتھ لاگ ان کریں۔",
     "i_am_a": "میں ایک ہوں",
     "customer": "کسٹمر",
     "customer_desc": "مجھے سروس چاہیے",
     "technician": "ٹیکنیشن",
     "technician_desc": "میں سروس فراہم کرتا ہوں",
-    "phone_label": "فون نمبر",
+    "phone_label": "ای میل ایڈریس",
     "send_otp": "او ٹی پی (OTP) بھیجیں",
     "enter_verification": "تصدیقی کوڈ درج کریں",
-    "sent_code_to": "ہم نے تصدیقی کوڈ +92 {phone} پر بھیجا ہے",
+    "sent_code_to": "ہم نے تصدیقی کوڈ {email} پر بھیجا ہے",
     "verify_continue": "تصدیق کریں اور جاری رکھیں",
     "didnt_get_code": "کوڈ موصول نہیں ہوا؟",
     "resend": "دوبارہ بھیجیں",
@@ -152,7 +152,9 @@
     "service_radius": "سروس کے فاصلے کی حد",
     "radius_miles": "{radius} کلومیٹر",
     "enter_new_phone": "نیا فون نمبر درج کریں",
-    "change_phone_title": "فون نمبر تبدیل کریں"
+    "change_phone_title": "فون نمبر تبدیل کریں",
+    "change_email": "ای میل تبدیل کریں",
+    "change_email_title": "ای میل ایڈریس تبدیل کریں"
   },
   "history": {
     "history_header": "سروس ہسٹری",

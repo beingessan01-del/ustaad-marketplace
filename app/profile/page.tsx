@@ -64,10 +64,12 @@ function ProfilePageContent() {
   const [promotions, setPromotions] = useState(false)
 
   // Modals Toggles
-  const [showPhoneModal, setShowPhoneModal] = useState(false)
-  const [newPhone, setNewPhone] = useState('')
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [newEmailInput, setNewEmailInput] = useState('')
   const [otpSent, setOtpSent] = useState(false)
-  const [phoneOtp, setPhoneOtp] = useState('')
+  const [emailOtp, setEmailOtp] = useState('')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [modalLoading, setModalLoading] = useState(false)
   
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [isSwitching, setIsSwitching] = useState(false)
@@ -105,10 +107,30 @@ function ProfilePageContent() {
     return () => clearTimeout(timer)
   }, [])
 
-  // Sync edits to localStorage
-  const handleSaveProfile = () => {
+  // Sync edits to localStorage and database
+  const handleSaveProfile = async () => {
     localStorage.setItem('ustad_name', name)
     localStorage.setItem('ustad_email', email)
+    localStorage.setItem('ustad_phone', phone)
+
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const userSession = await supabase.auth.getUser()
+      if (userSession.data.user) {
+        await supabase
+          .from('profiles')
+          .update({
+            name: name,
+            email: email,
+            phone: phone,
+          })
+          .eq('id', userSession.data.user.id)
+      }
+    } catch (e) {
+      console.error('Failed to sync profile to database:', e)
+    }
+
     alert(locale === 'ur' ? 'پروفائل کامیابی سے محفوظ ہو گئی!' : 'Profile saved successfully!')
   }
 
@@ -128,21 +150,66 @@ function ProfilePageContent() {
     localStorage.setItem('ustad_addresses', JSON.stringify(updated))
   }
 
-  const handleSendPhoneOtp = (e: React.FormEvent) => {
+  const handleSendEmailOtp = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (newPhone.replace(/\D/g, '').length < 10) return
-    setOtpSent(true)
+    if (!newEmailInput.includes('@')) return
+    setErrorMsg(null)
+    setModalLoading(true)
+
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithOtp({
+        email: newEmailInput,
+      })
+      if (error) {
+        setErrorMsg(error.message)
+      } else {
+        setOtpSent(true)
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to send OTP')
+    } finally {
+      setModalLoading(false)
+    }
   }
 
-  const handleConfirmPhoneChange = (e: React.FormEvent) => {
+  const handleConfirmEmailChange = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (phoneOtp.length < 6) return
-    setPhone(newPhone)
-    localStorage.setItem('ustad_phone', newPhone)
-    setShowPhoneModal(false)
-    setOtpSent(false)
-    setNewPhone('')
-    setPhoneOtp('')
+    if (emailOtp.length < 6) return
+    setErrorMsg(null)
+    setModalLoading(true)
+
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: newEmailInput,
+        token: emailOtp,
+        type: 'email',
+      })
+
+      if (error) {
+        setErrorMsg(error.message)
+        setModalLoading(false)
+        return
+      }
+
+      if (data.user) {
+        await supabase.from('profiles').update({ email: newEmailInput }).eq('id', data.user.id)
+      }
+
+      setEmail(newEmailInput)
+      localStorage.setItem('ustad_email', newEmailInput)
+      setShowEmailModal(false)
+      setOtpSent(false)
+      setNewEmailInput('')
+      setEmailOtp('')
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Verification failed')
+    } finally {
+      setModalLoading(false)
+    }
   }
 
   const handleNotificationChange = (type: 'updates' | 'promo') => {
@@ -232,13 +299,13 @@ function ProfilePageContent() {
                 <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                   <h1 className="text-xl font-bold tracking-tight text-foreground truncate">{name}</h1>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Phone className="size-3.5" />
-                    <span>+92 {phone}</span>
+                    <Mail className="size-3.5" />
+                    <span className="truncate max-w-[150px]">{email}</span>
                     <button
-                      onClick={() => setShowPhoneModal(true)}
-                      className="ms-1.5 text-primary hover:underline font-semibold tap"
+                      onClick={() => setShowEmailModal(true)}
+                      className="ms-1.5 text-primary hover:underline font-semibold tap shrink-0"
                     >
-                      {t('profile.change_number')}
+                      {t('profile.change_email')}
                     </button>
                   </div>
                 </div>
@@ -271,6 +338,18 @@ function ProfilePageContent() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      className="w-full rounded-xl border border-border bg-muted p-2.5 text-sm text-foreground outline-none focus:border-primary focus:bg-background"
+                    />
+                  </div>
+
+                  {/* Phone field */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground">Phone Number</label>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="e.g. 300 1234567"
                       className="w-full rounded-xl border border-border bg-muted p-2.5 text-sm text-foreground outline-none focus:border-primary focus:bg-background"
                     />
                   </div>
@@ -533,43 +612,49 @@ function ProfilePageContent() {
           )}
         </main>
 
-        {/* Change Phone OTP Dialog (Simulated) */}
-        <Dialog open={showPhoneModal} onOpenChange={setShowPhoneModal}>
+        {/* Change Email OTP Dialog */}
+        <Dialog open={showEmailModal} onOpenChange={setShowEmailModal}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
-              <DialogTitle>{t('profile.change_phone_title')}</DialogTitle>
+              <DialogTitle>{t('profile.change_email_title')}</DialogTitle>
               <DialogDescription>
-                We will send an SMS verification OTP to this new number.
+                We will send a verification code to this new email address.
               </DialogDescription>
             </DialogHeader>
 
+            {errorMsg && (
+              <div className="mb-2 text-xs font-semibold text-destructive bg-destructive/5 border border-destructive/20 rounded-xl p-3 leading-normal">
+                {errorMsg}
+              </div>
+            )}
+
             {!otpSent ? (
-              <form onSubmit={handleSendPhoneOtp} className="flex flex-col gap-4 py-2">
+              <form onSubmit={handleSendEmailOtp} className="flex flex-col gap-4 py-2">
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3">
-                  <span className="text-xs font-semibold text-muted-foreground">+92</span>
+                  <Mail className="size-4 text-muted-foreground shrink-0" />
                   <input
-                    type="tel"
-                    placeholder="300 1234567"
-                    value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
+                    type="email"
+                    placeholder="you@example.com"
+                    value={newEmailInput}
+                    onChange={(e) => setNewEmailInput(e.target.value)}
                     className="h-11 w-full bg-transparent text-xs text-foreground outline-none focus:bg-transparent"
                   />
                 </div>
-                <Button type="submit" disabled={newPhone.replace(/\D/g, '').length < 10} className="tap h-11 w-full">
-                  Send OTP Code
+                <Button type="submit" disabled={!newEmailInput.includes('@') || modalLoading} className="tap h-11 w-full">
+                  {modalLoading ? 'Sending...' : 'Send OTP Code'}
                 </Button>
               </form>
             ) : (
-              <form onSubmit={handleConfirmPhoneChange} className="flex flex-col gap-4 py-2">
+              <form onSubmit={handleConfirmEmailChange} className="flex flex-col gap-4 py-2">
                 <div className="flex flex-col gap-1 text-center">
-                  <span className="text-xs text-muted-foreground">OTP code sent to +92 {newPhone}</span>
+                  <span className="text-xs text-muted-foreground">OTP code sent to {newEmailInput}</span>
                 </div>
                 <input
                   type="text"
                   maxLength={6}
                   placeholder="Enter 6-digit OTP"
-                  value={phoneOtp}
-                  onChange={(e) => setPhoneOtp(e.target.value)}
+                  value={emailOtp}
+                  onChange={(e) => setEmailOtp(e.target.value)}
                   className="h-11 w-full text-center tracking-widest text-sm rounded-xl border border-border bg-muted outline-none focus:border-primary focus:bg-background font-mono"
                 />
                 <div className="flex gap-2">
@@ -577,11 +662,12 @@ function ProfilePageContent() {
                     variant="outline"
                     className="tap flex-1 bg-transparent"
                     onClick={() => setOtpSent(false)}
+                    disabled={modalLoading}
                   >
                     Back
                   </Button>
-                  <Button type="submit" disabled={phoneOtp.length < 6} className="tap flex-1">
-                    Verify & Save
+                  <Button type="submit" disabled={emailOtp.length < 6 || modalLoading} className="tap flex-1">
+                    {modalLoading ? 'Verifying...' : 'Verify & Save'}
                   </Button>
                 </div>
               </form>
