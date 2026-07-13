@@ -25,6 +25,7 @@ import {
   technicians,
   formatPKR,
   type Technician,
+  defaultSchedule,
 } from '@/lib/data'
 import {
   getDbTable,
@@ -44,7 +45,57 @@ export default function TechnicianDashboardPage() {
 
   // Selected technician simulation profile
   const [selectedTechId, setSelectedTechId] = useState<string>('usman-khan')
-  const activeTech = technicians.find((t) => t.id === selectedTechId) || technicians[0]
+  const [techList, setTechList] = useState(technicians)
+  const activeTech = techList.find((t) => t.id === selectedTechId) || techList[0]
+
+  useEffect(() => {
+    async function loadUserProfile() {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        const userSession = await supabase.auth.getUser()
+        if (userSession.data.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userSession.data.user.id)
+            .single()
+
+          if (profile && profile.account_type === 'technician') {
+            const existingIdx = technicians.findIndex(t => t.id === profile.id)
+            if (existingIdx === -1) {
+              const newTech: Technician = {
+                id: profile.id,
+                name: profile.name || 'My Tech Account',
+                initials: (profile.name || 'My Tech Account').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
+                specialty: 'Home Service Partner',
+                category: 'plumbing',
+                rating: 5.0,
+                reviewCount: 0,
+                distanceKm: 0.1,
+                status: 'available',
+                inspectionFee: 200,
+                area: 'Islamabad',
+                experienceYears: 1,
+                jobsCompleted: 0,
+                about: 'USTAD Registered Service Professional Partner',
+                avatarTint: 'bg-[#EAF1FE] text-primary',
+                schedule: defaultSchedule,
+                reviews: [],
+              }
+              setTechList([newTech, ...technicians])
+              setSelectedTechId(profile.id)
+            } else {
+              setSelectedTechId(profile.id)
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed loading technician profile from database:', e)
+      }
+    }
+    loadUserProfile()
+  }, [])
 
   // Statuses
   const [isOnline, setIsOnline] = useState(false)
@@ -273,7 +324,7 @@ export default function TechnicianDashboardPage() {
               }}
               className="w-full rounded-xl border border-border bg-muted p-2.5 text-sm text-foreground outline-none focus:border-primary focus:bg-background"
             >
-              {technicians.map((t) => (
+              {techList.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name} ({t.specialty})
                 </option>

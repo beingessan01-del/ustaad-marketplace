@@ -20,10 +20,44 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 
+import { useEffect } from 'react'
+
 export default function HomePage() {
   const router = useRouter()
   const { t } = useTranslation()
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [techList, setTechList] = useState(technicians)
+
+  useEffect(() => {
+    async function fetchTechnicians() {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('account_type', 'technician')
+        
+        if (data && data.length > 0) {
+          const mapped = data.map((profile: any, idx: number) => {
+            const mock = technicians[idx % technicians.length]
+            return {
+              ...mock,
+              id: profile.id,
+              name: profile.name || mock.name,
+              initials: (profile.name || mock.name).split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
+              specialty: mock.specialty,
+              category: mock.category,
+            }
+          })
+          setTechList(mapped)
+        }
+      } catch (e) {
+        console.warn('Failed to fetch technicians from Supabase, falling back to mock list:', e)
+      }
+    }
+    fetchTechnicians()
+  }, [])
 
   return (
     <CustomerLayout>
@@ -88,14 +122,14 @@ export default function HomePage() {
           <section className="mt-6">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold text-foreground">
-                <TranslatedText k="home.technicians_near_you" variables={{ count: String(technicians.length) }} />
+                <TranslatedText k="home.technicians_near_you" variables={{ count: String(techList.length) }} />
               </h2>
               <button className="text-sm font-medium text-primary hover:underline">
                 <TranslatedText k="home.sort_button" />
               </button>
             </div>
             <div className="flex flex-col gap-3">
-              {technicians.map((technician) => (
+              {techList.map((technician) => (
                 <TechnicianCard key={technician.id} technician={technician} />
               ))}
             </div>

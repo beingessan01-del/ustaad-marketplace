@@ -60,10 +60,35 @@ function MapPageContent() {
   // Populate technician statuses, fetching from Supabase first
   useEffect(() => {
     const loadOnlineTechs = async () => {
+      let activeTechnicians = [...technicians]
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('account_type', 'technician')
+        if (data && data.length > 0) {
+          activeTechnicians = data.map((profile: any, idx: number) => {
+            const mock = technicians[idx % technicians.length]
+            return {
+              ...mock,
+              id: profile.id,
+              name: profile.name || mock.name,
+              initials: (profile.name || mock.name).split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
+              specialty: mock.specialty,
+              category: mock.category,
+            }
+          })
+        }
+      } catch (e) {
+        console.warn('Failed to load technician profiles on map:', e)
+      }
+
       const statuses = await getDbTableAsync<TechnicianStatus>('technician_status')
 
       if (statuses.length === 0) {
-        const initialStatuses = technicians.map((t) => ({
+        const initialStatuses = activeTechnicians.map((t) => ({
           technician_id: t.id,
           is_online: t.status === 'available',
           current_lat: 33.7294,
@@ -73,11 +98,11 @@ function MapPageContent() {
         }))
         saveDbTable('technician_status', initialStatuses)
         const onlineIds = initialStatuses.filter(s => s.is_online).map(s => s.technician_id)
-        const matched = technicians.filter((t) => onlineIds.includes(t.id) || t.status === 'available')
+        const matched = activeTechnicians.filter((t) => onlineIds.includes(t.id) || t.status === 'available')
         setOnlineTechs(matched)
       } else {
         const onlineIds = statuses.filter((s) => s.is_online).map((s) => s.technician_id)
-        const matched = technicians.filter((t) => onlineIds.includes(t.id) || t.status === 'available')
+        const matched = activeTechnicians.filter((t) => onlineIds.includes(t.id) || t.status === 'available')
         setOnlineTechs(matched)
       }
       setLoading(false)

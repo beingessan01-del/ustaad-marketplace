@@ -59,6 +59,38 @@ function HistoryPageContent() {
   const [activeTab, setActiveTab] = useState<HistoryTab>('upcoming')
   const [loading, setLoading] = useState(true)
   const [jobs, setJobs] = useState<JobRequest[]>([])
+  const [techList, setTechList] = useState(technicians)
+
+  useEffect(() => {
+    async function fetchTechnicians() {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('account_type', 'technician')
+        
+        if (data && data.length > 0) {
+          const mapped = data.map((profile: any, idx: number) => {
+            const mock = technicians[idx % technicians.length]
+            return {
+              ...mock,
+              id: profile.id,
+              name: profile.name || mock.name,
+              initials: (profile.name || mock.name).split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
+              specialty: mock.specialty,
+              category: mock.category,
+            }
+          })
+          setTechList(mapped)
+        }
+      } catch (e) {
+        console.warn('Failed to fetch technicians from Supabase, falling back to mock list:', e)
+      }
+    }
+    fetchTechnicians()
+  }, [])
 
   // Detail Sheet / Rating Form states
   const [selectedJob, setSelectedJob] = useState<JobRequest | null>(null)
@@ -190,7 +222,7 @@ function HistoryPageContent() {
     if (!selectedJob || !selectedJob.matched_technician_id) return
 
     const techId = selectedJob.matched_technician_id
-    const tech = technicians.find(t => t.id === techId)
+    const tech = techList.find(t => t.id === techId)
 
     if (tech) {
       // Append review
@@ -295,7 +327,7 @@ function HistoryPageContent() {
                 </Card>
               ) : (
                 filteredJobs.map((job) => {
-                  const tech = technicians.find((t) => t.id === job.matched_technician_id)
+                  const tech = techList.find((t) => t.id === job.matched_technician_id)
                   const categoryInfo = serviceCategories.find((c) => c.id === job.service_category)
                   const Icon = categoryIcons[job.service_category] || Wrench
                   const tint = categoryTintClasses[job.service_category] || 'bg-primary/10'
@@ -408,7 +440,7 @@ function HistoryPageContent() {
                   </div>
 
                   <textarea
-                    placeholder={t('job.review_placeholder', { name: technicians.find(t => t.id === selectedJob.matched_technician_id)?.name || 'Technician' })}
+                    placeholder={t('job.review_placeholder', { name: techList.find(t => t.id === selectedJob.matched_technician_id)?.name || 'Technician' })}
                     rows={3}
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
