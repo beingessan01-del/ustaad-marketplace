@@ -13,6 +13,18 @@ type Mode = 'login' | 'signup'
 type AccountType = 'customer' | 'technician'
 type Step = 'email' | 'otp'
 
+function getErrorMessage(error: any): string {
+  if (!error) return 'Something went wrong, please try again.'
+  if (typeof error === 'string') return error
+  if (error.message && typeof error.message === 'string') return error.message
+  if (error.error_description && typeof error.error_description === 'string') return error.error_description
+  try {
+    const stringified = JSON.stringify(error)
+    if (stringified && stringified !== '{}') return stringified
+  } catch (e) {}
+  return 'Something went wrong, please try again.'
+}
+
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter()
   const supabase = createClient()
@@ -39,12 +51,12 @@ export function AuthForm({ mode }: { mode: Mode }) {
       })
 
       if (error) {
-        setErrorMsg(error.message)
+        setErrorMsg(getErrorMessage(error))
       } else {
         setStep('otp')
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to send OTP')
+      setErrorMsg(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -64,7 +76,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       })
 
       if (error) {
-        setErrorMsg(error.message)
+        setErrorMsg(getErrorMessage(error))
         setLoading(false)
         return
       }
@@ -94,7 +106,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         router.push('/home')
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Verification failed')
+      setErrorMsg(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
