@@ -49,10 +49,14 @@ function InstantBookingContent() {
 
   const serviceCategory = serviceCategories.find((c) => c.id === category) || serviceCategories[0]
 
-  // Unique request ID
+  // Unique request ID (Postgres bookings.id expects a valid UUID format)
   const requestIdRef = useRef<string>('')
   if (!requestIdRef.current && typeof window !== 'undefined') {
-    requestIdRef.current = 'REQ-' + Math.floor(100000 + Math.random() * 900000)
+    requestIdRef.current = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      const r = (Math.random() * 16) | 0
+      const v = c === 'x' ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    })
   }
   const requestId = requestIdRef.current
 
