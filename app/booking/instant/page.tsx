@@ -220,6 +220,17 @@ function InstantBookingContent() {
         top: `${Math.max(5, Math.min(95, pctTop))}%`,
         left: `${Math.max(5, Math.min(95, pctLeft))}%`,
       })
+
+      // Fetch real road route duration from OSRM (free service, no API key needed)
+      fetch(`https://router.project-osrm.org/route/v1/driving/${lng},${lat};${centerLng},${centerLat}?overview=false`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.routes && data.routes[0]) {
+            const durationMinutes = Math.ceil(data.routes[0].duration / 60)
+            setEta(durationMinutes)
+          }
+        })
+        .catch((err) => console.warn('Failed to fetch road ETA from OSRM:', err))
     })
 
     return () => {

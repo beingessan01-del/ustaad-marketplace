@@ -42,16 +42,17 @@ export default function HomePage() {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .eq('account_type', 'technician')
+          .eq('role', 'provider')
         
         if (data && data.length > 0) {
           const mapped = data.map((profile: any, idx: number) => {
             const mock = technicians[idx % technicians.length]
+            const nameToUse = profile.full_name || mock.name
             return {
               ...mock,
               id: profile.id,
-              name: profile.name || mock.name,
-              initials: (profile.name || mock.name).split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
+              name: nameToUse,
+              initials: nameToUse.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
               specialty: mock.specialty,
               category: mock.category,
             }
