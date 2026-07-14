@@ -74,14 +74,93 @@ export async function POST(req: Request) {
     const { messages, locale } = await req.json()
     const lastUserMessage = messages[messages.length - 1]?.content || ''
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
+    const groqApiKey = process.env.GROQ_API_KEY
+    const anthropicApiKey = process.env.ANTHROPIC_API_KEY
 
-    if (apiKey) {
+    // 1. If Groq API Key is configured, use Llama 3.1
+    if (groqApiKey) {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT + `
+If you decide to invoke a tool, append the following marker text at the end of your response:
+__TOOL_CALL__:{"name": "tool_name", "args": { ... }}
+
+Available tools:
+1. name: "get_price_estimate", args: { category: "plumbing" | "electrical" | "mechanic" | "painting" | "cleaning" | "carpentry", description?: string }
+2. name: "check_technician_availability", args: { category: "plumbing" | "electrical" | "mechanic" | "painting" | "cleaning" | "carpentry" }
+3. name: "draft_booking", args: { category: "plumbing" | "electrical" | "mechanic" | "painting" | "cleaning" | "carpentry", description: string, address?: string }
+4. name: "get_customer_service_history", args: {}
+` },
+            ...messages.map((m: any) => ({ role: m.role, content: m.content }))
+          ],
+          max_tokens: 1024,
+          temperature: 0.7,
+          stream: true
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Groq API request failed')
+      }
+
+      // Stream Groq response back to client
+      const encoder = new TextEncoder()
+      const decoder = new TextDecoder()
+      const stream = new ReadableStream({
+        async start(controller) {
+          const reader = response.body?.getReader()
+          if (!reader) {
+            controller.close()
+            return
+          }
+
+          let buffer = ''
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+              const cleanLine = line.trim()
+              if (cleanLine.startsWith('data:')) {
+                const jsonStr = cleanLine.slice(5).trim()
+                if (jsonStr === '[DONE]') continue
+                try {
+                  const data = JSON.parse(jsonStr)
+                  const text = data.choices[0]?.delta?.content
+                  if (text) {
+                    controller.enqueue(encoder.encode(text))
+                  }
+                } catch (e) {
+                  // ignore parse errors
+                }
+              }
+            }
+          }
+          controller.close()
+        }
+      })
+
+      return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+    }
+
+    // 2. If Anthropic API Key is configured, use Claude
+    if (anthropicApiKey) {
       // Call real Anthropic Messages API
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
-          'x-api-key': apiKey,
+          'x-api-key': anthropicApiKey,
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json'
         },
