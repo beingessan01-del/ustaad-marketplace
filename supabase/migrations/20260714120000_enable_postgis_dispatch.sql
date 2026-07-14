@@ -89,5 +89,5 @@ create trigger on_booking_dispatch
   after insert or update of search_radius_km
   on public.bookings
   for each row
-  when (new.status = 'searching')
+  when (new.status = 'pending')
   execute procedure public.match_booking_technicians();

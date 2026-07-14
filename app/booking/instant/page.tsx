@@ -39,6 +39,7 @@ import {
 } from '@/lib/storage-sync'
 import { MapPlaceholder } from '@/components/ustad/map-placeholder'
 import { StarRating } from '@/components/ustad/star-rating'
+import { createClient } from '@/lib/supabase/client'
 
 function InstantBookingContent() {
   const router = useRouter()
@@ -172,16 +173,32 @@ function InstantBookingContent() {
     insertDbRow('job_requests', newRequest)
 
     // Listen to changes on the database
-    const unsubscribe = subscribeToDbTable('job_requests', () => {
-      const requests = getDbTable<JobRequest>('job_requests')
-      const currentReq = requests.find((r) => r.id === requestId)
+    const unsubscribe = subscribeToDbTable('job_requests', async () => {
+      const supabaseClient = createClient()
+      const { data: currentReq } = await supabaseClient
+        .from('bookings')
+        .select('*')
+        .eq('id', requestId)
+        .single()
 
       if (currentReq) {
-        if (currentReq.status !== status) {
-          setStatus(currentReq.status)
+        let clientStatus: any = currentReq.status
+        if (clientStatus === 'pending') {
+          clientStatus = 'searching'
+        } else if (clientStatus === 'confirmed') {
+          setStatus((prev) => {
+            if (prev === 'searching') return 'matched'
+            return prev // Keep client-side state machine
+          })
+          if (currentReq.technician_id) {
+            setMatchedTechId(currentReq.technician_id)
+          }
+          return
         }
-        if (currentReq.matched_technician_id && currentReq.matched_technician_id !== matchedTechId) {
-          setMatchedTechId(currentReq.matched_technician_id)
+
+        setStatus(clientStatus)
+        if (currentReq.technician_id) {
+          setMatchedTechId(currentReq.technician_id)
         }
       }
     })

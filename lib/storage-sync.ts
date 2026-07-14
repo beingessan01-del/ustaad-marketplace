@@ -149,6 +149,11 @@ export function insertDbRow<T>(tableName: string, newRow: T) {
         const userSession = await supabase.auth.getUser()
         const customerId = userSession.data.user?.id || '00000000-0000-0000-0000-000000000000'
         
+        // Map client status 'searching' to DB 'pending'
+        let dbStatus = r.status
+        if (dbStatus === 'searching') dbStatus = 'pending'
+        else if (dbStatus === 'matched' || dbStatus === 'en_route' || dbStatus === 'arrived') dbStatus = 'confirmed'
+
         await supabase.from('bookings').insert({
           customer_id: customerId,
           technician_id: r.technician_id === 'usman-khan' ? null : r.technician_id,
@@ -158,7 +163,7 @@ export function insertDbRow<T>(tableName: string, newRow: T) {
           address: r.address || r.location,
           location: r.location || r.address,
           description: r.description || 'No description',
-          status: r.status,
+          status: dbStatus,
           price_estimate_min: r.price_estimate_min,
           price_estimate_max: r.price_estimate_max,
           price: r.final_price || r.price,
@@ -199,11 +204,15 @@ export function updateDbRow<T extends { id?: string; technician_id?: string }>(
     try {
       const u = updates as any
       if (tableName === 'job_requests') {
+        let dbStatus = u.status
+        if (dbStatus === 'searching') dbStatus = 'pending'
+        else if (dbStatus === 'matched' || dbStatus === 'en_route' || dbStatus === 'arrived') dbStatus = 'confirmed'
+
         // Match both real UUID and mock IDs in local session
         await supabase
           .from('bookings')
           .update({
-            status: u.status,
+            status: dbStatus,
             technician_id: u.matched_technician_id || u.technician_id,
             price: u.final_price || u.price,
           })

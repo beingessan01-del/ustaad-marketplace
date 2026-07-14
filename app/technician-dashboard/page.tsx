@@ -340,24 +340,24 @@ export default function TechnicianDashboardPage() {
   const handleAcceptOffer = async () => {
     if (!incomingOffer || !userId) return
 
-    // 1. Concurrency Check: Verify booking status is still 'searching'
+    // 1. Concurrency Check: Verify booking status is still 'pending' (client 'searching')
     const { data: booking } = await supabase
       .from('bookings')
       .select('status')
       .eq('id', incomingOffer.job_request_id)
       .single()
 
-    if (!booking || booking.status !== 'searching') {
+    if (!booking || booking.status !== 'pending') {
       alert('This job has already been taken by another provider.')
       await handleDeclineOffer()
       return
     }
 
-    // 2. Accept atomically
+    // 2. Accept atomically (maps 'matched' to database 'confirmed')
     await supabase
       .from('bookings')
       .update({
-        status: 'matched',
+        status: 'confirmed',
         technician_id: userId
       })
       .eq('id', incomingOffer.job_request_id)
@@ -380,12 +380,23 @@ export default function TechnicianDashboardPage() {
 
   const handleStatusChange = async (newStatus: 'en_route' | 'arrived' | 'in_progress' | 'completed') => {
     if (!activeJobId) return
-    await supabase.from('bookings').update({ status: newStatus }).eq('id', activeJobId)
+
+    let dbStatus: any = newStatus
+    if (newStatus === 'en_route' || newStatus === 'arrived') {
+      dbStatus = 'confirmed'
+    }
+
+    const { error } = await supabase.from('bookings').update({ status: dbStatus }).eq('id', activeJobId)
     
-    if (newStatus === 'completed') {
-      alert('Job completed successfully! Cash collected.')
-      setActiveJobId(null)
-      setActiveJob(null)
+    if (!error) {
+      // Keep client-side state synchronized for rich UI navigation sequence
+      setActiveJob((prev: any) => prev ? { ...prev, status: newStatus } : null)
+      
+      if (newStatus === 'completed') {
+        alert('Job completed successfully! Cash collected.')
+        setActiveJobId(null)
+        setActiveJob(null)
+      }
     }
   }
 
