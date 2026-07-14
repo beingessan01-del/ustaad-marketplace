@@ -183,10 +183,10 @@ begin
   insert into public.profiles (id, email, full_name, role, avatar_url)
   values (
     new.id,
-    new.email,
-    coalesce(new.raw_user_meta_data->>'name', 'New User'),
-    coalesce(new.raw_user_meta_data->>'account_type', 'customer'),
-    new.raw_user_meta_data->>'avatar_url'
+    coalesce(new.email, ''),
+    coalesce(coalesce(new.raw_user_meta_data, '{}'::jsonb)->>'name', 'New User'),
+    coalesce(coalesce(new.raw_user_meta_data, '{}'::jsonb)->>'account_type', 'customer'),
+    coalesce(new.raw_user_meta_data, '{}'::jsonb)->>'avatar_url'
   );
   return new;
 end;
