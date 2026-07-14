@@ -70,68 +70,46 @@ export default function ChatPage() {
     carpentry: Hammer,
   }
 
-  // Populate initial context and history on mount, querying Supabase first
+  // Populate initial context on mount
   useEffect(() => {
-    // 1. Check rate limits
+    // 1. Initialize today's chat limit counter safely
     const today = new Date().toDateString()
-    const storedLimitDay = localStorage.getItem('ustad_chat_limit_day')
     let count = 0
-
-    if (storedLimitDay === today) {
-      count = Number(localStorage.getItem('ustad_chat_limit_count') || '0')
-    } else {
-      localStorage.setItem('ustad_chat_limit_day', today)
-      localStorage.setItem('ustad_chat_limit_count', '0')
+    try {
+      const storedLimitDay = localStorage.getItem('ustad_chat_limit_day')
+      if (storedLimitDay === today) {
+        count = Number(localStorage.getItem('ustad_chat_limit_count') || '0')
+      } else {
+        localStorage.setItem('ustad_chat_limit_day', today)
+        localStorage.setItem('ustad_chat_limit_count', '0')
+      }
+    } catch (e) {
+      console.warn('LocalStorage not available:', e)
     }
+
     setRateLimitCount(count)
     if (count >= 1000) {
       setShowLimitWarning(true)
     }
 
-    // 2. Load prior conversation context
-    const loadHistory = async () => {
-      const currentList = await getDbTableAsync<any>('chat_messages')
-      if (currentList && currentList.length > 0) {
-        const mapped: Message[] = currentList.map((m: any) => ({
-          id: m.id || String(m.created_at || Math.random()),
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-        }))
-        setMessages(mapped)
-      } else {
-        const storedMessages = localStorage.getItem('ustad_chat_history')
-        if (storedMessages) {
-          try {
-            setMessages(JSON.parse(storedMessages))
-          } catch (err) {
-            console.error('Failed to parse stored chat history:', err)
-            localStorage.removeItem('ustad_chat_history')
-          }
-        } else {
-          const defaultGreeting: Message = {
-            id: 'welcome',
-            role: 'assistant',
-            content: locale === 'ur' 
-              ? 'السلام علیکم! میں استاد کا لائیو چیٹ اسسٹنٹ ہوں۔ میں آپ کی بکنگ، قیمتوں کے اندازے اور قریبی ٹیکنیشنز تلاش کرنے میں مدد کر سکتا ہوں۔ میں آج آپ کی کیا مدد کروں؟'
-              : 'Asalam-o-Alaikum! I am the USTAD AI Assistant. I can help you check service prices, find available technicians, or prepare a booking card. What can I do for you today?',
-          }
-          setMessages([defaultGreeting])
-        }
-      }
+    // 2. Set default welcome greeting
+    const defaultGreeting: Message = {
+      id: 'welcome',
+      role: 'assistant',
+      content: locale === 'ur' 
+        ? 'السلام علیکم! میں استاد کا لائیو چیٹ اسسٹنٹ ہوں۔ میں آپ کی بکنگ، قیمتوں کے اندازے اور قریبی ٹیکنیشنز تلاش کرنے میں مدد کر سکتا ہوں۔ میں آج آپ کی کیا مدد کروں؟'
+        : 'Asalam-o-Alaikum! I am the USTAD AI Assistant. I can help you check service prices, find available technicians, or prepare a booking card. What can I do for you today?',
     }
-    
-    loadHistory()
-  }, [])
+    setMessages([defaultGreeting])
+  }, [locale])
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // Save history to localStorage
-  const saveChatHistory = (updated: Message[]) => {
-    localStorage.setItem('ustad_chat_history', JSON.stringify(updated.slice(-20))) // limit window to 20 messages
-  }
+  // Stub saveChatHistory to prevent errors
+  const saveChatHistory = (updated: Message[]) => {}
 
   const handleSend = async (textToSend: string) => {
     const trimmed = textToSend.trim()
