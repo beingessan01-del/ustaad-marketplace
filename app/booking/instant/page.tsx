@@ -173,7 +173,8 @@ function InstantBookingContent() {
         const customerId = user?.id
 
         if (!customerId) {
-          console.warn('No authenticated user found for booking insert')
+          alert('You must be logged in as a customer to request a booking. Redirecting to login...')
+          router.push('/login')
           return
         }
 
