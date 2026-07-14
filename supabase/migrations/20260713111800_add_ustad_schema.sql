@@ -48,7 +48,13 @@ create table if not exists public.notification_preferences (
 );
 
 -- 2. Alter existing tables to append missing fields
--- Profiles table is already fully defined (id, full_name, phone, role, avatar_url, created_at)
+-- Alter profiles
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='email') then
+    alter table public.profiles add column email text;
+  end if;
+end $$;
 
 -- Alter Bookings (Job Requests schema)
 do $$
