@@ -3,15 +3,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Mail, User, Wrench } from 'lucide-react'
+import { Mail, User, Wrench, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
 import { createClient } from '@/lib/supabase/client'
 
 type Mode = 'login' | 'signup'
 type AccountType = 'customer' | 'technician'
-type Step = 'email' | 'otp'
 
 function getErrorMessage(error: any): string {
   if (!error) return 'Something went wrong, please try again.'
@@ -29,81 +27,94 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter()
   const supabase = createClient()
   
-  const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
-  const [otp, setOtp] = useState('')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
   const [accountType, setAccountType] = useState<AccountType>('customer')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   const isSignup = mode === 'signup'
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  const formValid = emailValid && password.length >= 6 && (!isSignup || fullName.trim().length > 0)
 
-  async function handleSendOtp(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!emailValid) return
+    if (!formValid) return
     setErrorMsg(null)
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-      })
+      if (isSignup) {
+        // Sign up standard user
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name: fullName,
+              account_type: accountType,
+            }
+          }
+        })
 
-      if (error) {
-        setErrorMsg(getErrorMessage(error))
-      } else {
-        setStep('otp')
-      }
-    } catch (err: any) {
-      setErrorMsg(getErrorMessage(err))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleVerify(e: React.FormEvent) {
-    e.preventDefault()
-    if (otp.length < 6) return
-    setErrorMsg(null)
-    setLoading(true)
-
-    try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email,
-        token: otp,
-        type: 'email',
-      })
-
-      if (error) {
-        setErrorMsg(getErrorMessage(error))
-        setLoading(false)
-        return
-      }
-
-      // Upsert profiles details into profiles table
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: data.user.id,
-            name: isSignup ? 'New User' : (data.user.user_metadata?.name || 'User'),
-            email: email,
-            account_type: accountType,
-          })
-
-        if (profileError) {
-          console.error('Error saving profile:', profileError.message)
+        if (error) {
+          setErrorMsg(getErrorMessage(error))
+          setLoading(false)
+          return
         }
-      }
 
-      localStorage.setItem('ustad_account_type', accountType)
-      localStorage.setItem('ustad_email', email)
-      
-      if (accountType === 'technician') {
-        router.push('/technician-dashboard')
+        // Save account type metadata locally
+        localStorage.setItem('ustad_account_type', accountType)
+        localStorage.setItem('ustad_email', email)
+
+        // Profiles upsert backup helper
+        if (data.user) {
+          await supabase.from('profiles').upsert({
+            id: data.user.id,
+            email: email,
+            full_name: fullName,
+            role: accountType,
+          })
+        }
+
+        // Redirect based on role
+        if (accountType === 'technician') {
+          router.push('/technician-dashboard')
+        } else {
+          router.push('/home')
+        }
       } else {
-        router.push('/home')
+        // Log in standard user
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+        if (error) {
+          setErrorMsg(getErrorMessage(error))
+          setLoading(false)
+          return
+        }
+
+        // Fetch account type from profile
+        if (data.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', data.user.id)
+            .single()
+
+          const role = profile?.role || 'customer'
+          localStorage.setItem('ustad_account_type', role)
+          localStorage.setItem('ustad_email', email)
+
+          if (role === 'technician') {
+            router.push('/technician-dashboard')
+          } else {
+            router.push('/home')
+          }
+        }
       }
     } catch (err: any) {
       setErrorMsg(getErrorMessage(err))
@@ -121,125 +132,112 @@ export function AuthForm({ mode }: { mode: Mode }) {
           </div>
         )}
 
-        {step === 'email' ? (
-          <>
-            <div className="mb-6 flex flex-col gap-1.5">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                {isSignup ? 'Create your account' : 'Welcome back'}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {isSignup
-                  ? 'Sign up with your email address to get started.'
-                  : 'Log in with your email address to continue.'}
-              </p>
+        <div className="mb-6 flex flex-col gap-1.5">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            {isSignup ? 'Create your account' : 'Welcome back'}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {isSignup
+              ? 'Fill in your details below to get started.'
+              : 'Enter your credentials to access your account.'}
+          </p>
+        </div>
+
+        {isSignup && (
+          <div className="mb-5">
+            <p className="mb-2 text-sm font-medium text-foreground">
+              I am a
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <AccountTypeOption
+                icon={User}
+                label="Customer"
+                description="I need services"
+                active={accountType === 'customer'}
+                onClick={() => setAccountType('customer')}
+              />
+              <AccountTypeOption
+                icon={Wrench}
+                label="Technician"
+                description="I provide services"
+                active={accountType === 'technician'}
+                onClick={() => setAccountType('technician')}
+              />
             </div>
-
-            {isSignup && (
-              <div className="mb-5">
-                <p className="mb-2 text-sm font-medium text-foreground">
-                  I am a
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <AccountTypeOption
-                    icon={User}
-                    label="Customer"
-                    description="I need services"
-                    active={accountType === 'customer'}
-                    onClick={() => setAccountType('customer')}
-                  />
-                  <AccountTypeOption
-                    icon={Wrench}
-                    label="Technician"
-                    description="I provide services"
-                    active={accountType === 'technician'}
-                    onClick={() => setAccountType('technician')}
-                  />
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleSendOtp} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="email" className="text-sm font-medium text-foreground">
-                  Email address
-                </label>
-                <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 focus-within:border-primary">
-                  <Mail className="size-4 shrink-0 text-muted-foreground" />
-                  <input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={loading}
-                    placeholder="you@example.com"
-                    className="h-11 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                size="lg"
-                disabled={!emailValid || loading}
-                className="tap h-11 w-full"
-              >
-                {loading ? 'Sending...' : 'Send OTP'}
-              </Button>
-            </form>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => setStep('email')}
-              disabled={loading}
-              className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-            >
-              <ArrowLeft className="size-4" />
-              Back
-            </button>
-
-            <div className="mb-6 flex flex-col gap-1.5">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Enter verification code
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                We sent a 6-digit code to{' '}
-                <span className="font-medium text-foreground">{email}</span>
-              </p>
-            </div>
-
-            <form onSubmit={handleVerify} className="flex flex-col gap-5">
-              <InputOTP
-                maxLength={6}
-                value={otp}
-                onChange={setOtp}
-                disabled={loading}
-                containerClassName="justify-between"
-              >
-                <InputOTPGroup className="flex w-full justify-between gap-2">
-                  {[0, 1, 2, 3, 4, 5].map((i) => (
-                    <InputOTPSlot
-                      key={i}
-                      index={i}
-                      className="size-12 flex-1 rounded-xl border text-base font-semibold first:rounded-l-xl last:rounded-r-xl"
-                    />
-                  ))}
-                </InputOTPGroup>
-              </InputOTP>
-
-              <Button
-                type="submit"
-                size="lg"
-                disabled={otp.length < 6 || loading}
-                className="tap h-11 w-full"
-              >
-                {loading ? 'Verifying...' : 'Verify & continue'}
-              </Button>
-            </form>
-          </>
+          </div>
         )}
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {isSignup && (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="fullName" className="text-sm font-medium text-foreground">
+                Full Name
+              </label>
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 focus-within:border-primary">
+                <User className="size-4 shrink-0 text-muted-foreground" />
+                <input
+                  id="fullName"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  disabled={loading}
+                  placeholder="John Doe"
+                  required
+                  className="h-11 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="email" className="text-sm font-medium text-foreground">
+              Email address
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 focus-within:border-primary">
+              <Mail className="size-4 shrink-0 text-muted-foreground" />
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                placeholder="you@example.com"
+                required
+                className="h-11 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="password" className="text-sm font-medium text-foreground">
+              Password
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 focus-within:border-primary">
+              <Lock className="size-4 shrink-0 text-muted-foreground" />
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                placeholder="••••••••"
+                required
+                minLength={6}
+                className="h-11 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+          </div>
+
+          <Button
+            type="submit"
+            size="lg"
+            disabled={!formValid || loading}
+            className="tap h-11 w-full mt-2"
+          >
+            {loading ? 'Processing...' : (isSignup ? 'Create Account' : 'Log In')}
+          </Button>
+        </form>
       </div>
 
       <p className="mt-4 text-center text-xs text-muted-foreground">
