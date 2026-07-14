@@ -920,28 +920,55 @@ export default function TechnicianDashboardPage() {
               </div>
 
               {mockGps && (
-                <div className="grid grid-cols-2 gap-3 animate-fadeIn">
+                <div className="flex flex-col gap-3.5 animate-fadeIn">
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor="mockLat" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Latitude</label>
-                    <input
-                      id="mockLat"
-                      type="number"
-                      step="0.0001"
-                      value={mockLat}
-                      onChange={(e) => setMockLat(Number(e.target.value))}
-                      className="h-10 w-full rounded-xl border border-border bg-muted px-3 text-xs outline-none focus:border-primary focus:bg-background text-foreground"
-                    />
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Select Sector / Location Preset</label>
+                    <select
+                      onChange={(e) => {
+                        const val = e.target.value
+                        if (val) {
+                          const [latStr, lngStr] = val.split(',')
+                          setMockLat(Number(latStr))
+                          setMockLng(Number(lngStr))
+                        }
+                      }}
+                      className="h-10 w-full rounded-xl border border-border bg-muted px-2.5 text-xs outline-none focus:border-primary focus:bg-background text-foreground"
+                    >
+                      <option value="">-- Choose Preset Sector --</option>
+                      <option value="33.7294,73.0561">Islamabad F-7 (Center)</option>
+                      <option value="33.7125,73.0672">Islamabad Blue Area</option>
+                      <option value="33.6895,73.0285">Islamabad G-9</option>
+                      <option value="33.7422,73.0371">Islamabad E-7</option>
+                      <option value="33.6592,73.0763">Islamabad I-9</option>
+                      <option value="33.5936,73.0531">Rawalpindi Saddar</option>
+                      <option value="33.6425,73.0728">Rawalpindi Commercial Market</option>
+                      <option value="33.5186,73.0945">Rawalpindi Bahria Town</option>
+                    </select>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="mockLng" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Longitude</label>
-                    <input
-                      id="mockLng"
-                      type="number"
-                      step="0.0001"
-                      value={mockLng}
-                      onChange={(e) => setMockLng(Number(e.target.value))}
-                      className="h-10 w-full rounded-xl border border-border bg-muted px-3 text-xs outline-none focus:border-primary focus:bg-background text-foreground"
-                    />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="mockLat" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Latitude</label>
+                      <input
+                        id="mockLat"
+                        type="number"
+                        step="0.0001"
+                        value={mockLat}
+                        onChange={(e) => setMockLat(Number(e.target.value))}
+                        className="h-10 w-full rounded-xl border border-border bg-muted px-3 text-xs outline-none focus:border-primary focus:bg-background text-foreground"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="mockLng" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Longitude</label>
+                      <input
+                        id="mockLng"
+                        type="number"
+                        step="0.0001"
+                        value={mockLng}
+                        onChange={(e) => setMockLng(Number(e.target.value))}
+                        className="h-10 w-full rounded-xl border border-border bg-muted px-3 text-xs outline-none focus:border-primary focus:bg-background text-foreground"
+                      />
+                    </div>
                   </div>
                 </div>
               )}

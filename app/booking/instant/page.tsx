@@ -383,6 +383,31 @@ function InstantBookingContent() {
 
               {showSimSettings && (
                 <div className="flex flex-col gap-2 pt-1.5 border-t border-border/40 animate-fadeIn">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase">Select Sector / Location Preset</label>
+                    <select
+                      onChange={(e) => {
+                        const val = e.target.value
+                        if (val) {
+                          const [latStr, lngStr] = val.split(',')
+                          setCustLat(Number(latStr))
+                          setCustLng(Number(lngStr))
+                        }
+                      }}
+                      className="h-8 w-full rounded-lg border border-border bg-muted px-2 text-[11px] outline-none text-foreground focus:bg-background"
+                    >
+                      <option value="">-- Choose Preset Sector --</option>
+                      <option value="33.7294,73.0561">Islamabad F-7 (Center)</option>
+                      <option value="33.7125,73.0672">Islamabad Blue Area</option>
+                      <option value="33.6895,73.0285">Islamabad G-9</option>
+                      <option value="33.7422,73.0371">Islamabad E-7</option>
+                      <option value="33.6592,73.0763">Islamabad I-9</option>
+                      <option value="33.5936,73.0531">Rawalpindi Saddar</option>
+                      <option value="33.6425,73.0728">Rawalpindi Commercial Market</option>
+                      <option value="33.5186,73.0945">Rawalpindi Bahria Town</option>
+                    </select>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[9px] font-bold text-muted-foreground uppercase">Latitude</label>
