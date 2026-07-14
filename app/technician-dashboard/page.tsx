@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
 import { MapPlaceholder } from '@/components/ustad/map-placeholder'
 
-type Tab = 'dashboard' | 'history' | 'profile'
+type Tab = 'dashboard' | 'history' | 'profile' | 'messages'
 
 export default function TechnicianDashboardPage() {
   const router = useRouter()
@@ -59,6 +59,7 @@ export default function TechnicianDashboardPage() {
   // History logs
   const [historyJobs, setHistoryJobs] = useState<any[]>([])
   const [earningsSummary, setEarningsSummary] = useState({ week: 0, month: 0 })
+  const [chatThreads, setChatThreads] = useState<any[]>([])
 
   // Settings Forms
   const [bio, setBio] = useState('')
@@ -67,6 +68,39 @@ export default function TechnicianDashboardPage() {
   const [categories, setCategories] = useState<string[]>([])
   const [radius, setRadius] = useState(10)
   const [savingSettings, setSavingSettings] = useState(false)
+
+  // Fetch messages thread history
+  useEffect(() => {
+    if (!userId || activeTab !== 'messages') return
+
+    async function loadChatThreads() {
+      const { data: bookingsList } = await supabase
+        .from('bookings')
+        .select('*, job_messages(*), profiles:customer_id(full_name)')
+        .eq('technician_id', userId)
+        .order('created_at', { ascending: false })
+
+      if (bookingsList) {
+        const threads = bookingsList.map((b: any) => {
+          const msgs = b.job_messages || []
+          const sortedMsgs = [...msgs].sort((x: any, y: any) => new Date(y.created_at).getTime() - new Date(x.created_at).getTime())
+          const latestMsg = sortedMsgs[0]
+
+          return {
+            id: b.id,
+            category: b.service_category,
+            status: b.status,
+            partnerName: b.profiles?.full_name || 'Customer Client',
+            latestText: latestMsg ? latestMsg.content : 'No messages yet',
+            timestamp: latestMsg ? new Date(latestMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(b.created_at).toLocaleDateString(),
+            unread: latestMsg ? (latestMsg.sender_id !== userId && !latestMsg.read_at) : false,
+          }
+        })
+        setChatThreads(threads)
+      }
+    }
+    loadChatThreads()
+  }, [userId, activeTab])
 
   // 1. Fetch User and initial DB data
   useEffect(() => {
@@ -423,6 +457,26 @@ export default function TechnicianDashboardPage() {
     }
   }
 
+  const handleLogout = async () => {
+    if (confirm('Are you sure you want to log out?')) {
+      if (geoWatchId !== null && typeof window !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.clearWatch(geoWatchId)
+      }
+      
+      if (userId) {
+        await supabase.from('technician_status').upsert({
+          technician_id: userId,
+          is_online: false,
+          last_ping_at: new Date().toISOString(),
+        })
+      }
+
+      await supabase.auth.signOut()
+      localStorage.clear()
+      router.push('/login')
+    }
+  }
+
   const toggleCategory = (cat: string) => {
     setCategories((prev) =>
       prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
@@ -624,13 +678,69 @@ export default function TechnicianDashboardPage() {
 
                   {/* Contact client links */}
                   <div className="grid grid-cols-2 gap-2 mt-1">
-                    <Button variant="outline" className="tap justify-center bg-transparent h-11" render={<a href={`tel:+923001234567`} />} />
-                    <Button variant="outline" className="tap justify-center bg-transparent h-11" render={<a href={`sms:+923001234567`} />} />
+                    <Button 
+                      variant="outline" 
+                      className="tap justify-center bg-transparent h-11" 
+                      render={<a href={`tel:+923001234567`} />}
+                    >
+                      <Phone className="size-4 mr-2" />
+                      Call Customer
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="tap justify-center bg-transparent h-11"
+                      onClick={() => router.push(`/chat/${activeJobId}`)}
+                    >
+                      <MessageSquare className="size-4 mr-2" />
+                      Chat Customer
+                    </Button>
                   </div>
                 </div>
               </div>
             )}
           </>
+        )}
+
+        {/* Chat History Messages list tab */}
+        {activeTab === 'messages' && (
+          <div className="flex flex-col gap-4">
+            <h2 className="text-base font-bold text-foreground">Client Conversations</h2>
+            <div className="flex flex-col gap-2">
+              {chatThreads.length > 0 ? (
+                chatThreads.map((thread) => (
+                  <Card
+                    key={thread.id}
+                    onClick={() => router.push(`/chat/${thread.id}`)}
+                    className="border border-border hover:border-primary/20 transition-all cursor-pointer relative"
+                  >
+                    <CardContent className="p-4 flex items-start gap-3">
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold">
+                        <MessageSquare className="size-4.5" />
+                      </span>
+                      <div className="flex-1 min-w-0 flex flex-col gap-1 pr-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-foreground truncate">{thread.partnerName}</span>
+                          <span className="text-[10px] text-muted-foreground">{thread.timestamp}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground capitalize font-medium">{thread.category} Service • Status: {thread.status}</p>
+                        <p className={cn("text-xs truncate mt-1", thread.unread ? "font-bold text-foreground" : "text-muted-foreground/80")}>
+                          {thread.latestText}
+                        </p>
+                        {thread.unread && (
+                          <span className="absolute right-4 bottom-5 size-2 rounded-full bg-primary" />
+                        )}
+                      </div>
+                      <ChevronRight className="size-4 text-muted-foreground/50 absolute end-3 top-1/2 -translate-y-1/2" />
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <div className="py-12 text-center text-xs text-muted-foreground">
+                  No active client conversations.
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Job History tab */}
@@ -762,6 +872,15 @@ export default function TechnicianDashboardPage() {
             >
               {savingSettings ? 'Saving...' : 'Save Settings'}
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="tap h-12 w-full mt-2.5 border-destructive/30 text-destructive hover:bg-destructive/5 hover:border-destructive font-semibold bg-transparent"
+              onClick={handleLogout}
+            >
+              Logout Account
+            </Button>
           </form>
         )}
       </main>
@@ -844,6 +963,16 @@ export default function TechnicianDashboardPage() {
         >
           <Wrench className="size-5" />
           Dashboard
+        </button>
+        <button
+          onClick={() => setActiveTab('messages')}
+          className={cn(
+            "flex flex-col items-center gap-1 text-[10px] font-semibold transition-colors",
+            activeTab === 'messages' ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <MessageSquare className="size-5" />
+          Messages
         </button>
         <button
           onClick={() => setActiveTab('history')}

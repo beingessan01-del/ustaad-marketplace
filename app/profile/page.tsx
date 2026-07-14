@@ -79,9 +79,9 @@ function ProfilePageContent() {
   const [techCategories, setTechCategories] = useState<string[]>(['plumbing'])
   const [techRadius, setTechRadius] = useState(15)
 
-  // Hydration sync
+  // Hydration sync & fresh Supabase profile query on mount
   useEffect(() => {
-    // Read from localStorage on mount
+    // Read from localStorage on mount first for faster loader shell
     const savedType = localStorage.getItem('ustad_account_type') as 'customer' | 'technician'
     if (savedType) setAccountType(savedType)
 
@@ -103,32 +103,65 @@ function ProfilePageContent() {
     const savedPromo = localStorage.getItem('ustad_notif_promo')
     if (savedPromo) setPromotions(savedPromo === 'true')
 
-    const timer = setTimeout(() => setLoading(false), 500)
-    return () => clearTimeout(timer)
+    async function loadLiveProfile() {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: prof, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+
+          if (!error && prof) {
+            setName(prof.full_name || '')
+            setEmail(prof.email || '')
+            setPhone(prof.phone || '')
+            localStorage.setItem('ustad_name', prof.full_name || '')
+            localStorage.setItem('ustad_email', prof.email || '')
+            localStorage.setItem('ustad_phone', prof.phone || '')
+          }
+        }
+      } catch (e) {
+        console.warn('Failed loading database profile:', e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadLiveProfile()
   }, [])
 
   // Sync edits to localStorage and database
   const handleSaveProfile = async () => {
-    localStorage.setItem('ustad_name', name)
-    localStorage.setItem('ustad_email', email)
-    localStorage.setItem('ustad_phone', phone)
-
     try {
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
       const userSession = await supabase.auth.getUser()
       if (userSession.data.user) {
-        await supabase
+        const { error } = await supabase
           .from('profiles')
           .update({
-            name: name,
+            full_name: name,
             email: email,
             phone: phone,
           })
           .eq('id', userSession.data.user.id)
+
+        if (error) {
+          alert('Failed to save profile changes: ' + error.message)
+          return
+        }
+
+        localStorage.setItem('ustad_name', name)
+        localStorage.setItem('ustad_email', email)
+        localStorage.setItem('ustad_phone', phone)
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to sync profile to database:', e)
+      alert('Failed to save profile changes: ' + e.message)
+      return
     }
 
     alert(locale === 'ur' ? 'پروفائل کامیابی سے محفوظ ہو گئی!' : 'Profile saved successfully!')

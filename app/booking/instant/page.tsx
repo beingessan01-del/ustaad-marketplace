@@ -482,7 +482,11 @@ function InstantBookingContent() {
                     <Phone className="size-4 mr-2" />
                     Call
                   </Button>
-                  <Button variant="outline" className="tap justify-center bg-transparent h-11" render={<a href={`sms:+923001234567`} />}>
+                  <Button 
+                    variant="outline" 
+                    className="tap justify-center bg-transparent h-11"
+                    onClick={() => router.push(`/chat/${requestId}`)}
+                  >
                     <MessageSquare className="size-4 mr-2" />
                     Chat
                   </Button>

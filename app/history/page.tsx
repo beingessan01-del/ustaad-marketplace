@@ -17,6 +17,7 @@ import {
   Star,
   RefreshCw,
   Navigation,
+  MessageSquare,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CustomerLayout } from '@/components/ustad/customer-layout'
@@ -49,7 +50,7 @@ import {
 } from '@/lib/data'
 import { StarRating } from '@/components/ustad/star-rating'
 
-type HistoryTab = 'upcoming' | 'completed' | 'cancelled'
+type HistoryTab = 'upcoming' | 'completed' | 'cancelled' | 'messages'
 
 function HistoryPageContent() {
   const router = useRouter()
@@ -60,6 +61,7 @@ function HistoryPageContent() {
   const [loading, setLoading] = useState(true)
   const [jobs, setJobs] = useState<JobRequest[]>([])
   const [techList, setTechList] = useState(technicians)
+  const [chatThreads, setChatThreads] = useState<any[]>([])
 
   useEffect(() => {
     async function fetchTechnicians() {
@@ -122,6 +124,45 @@ function HistoryPageContent() {
   useEffect(() => {
     const loadJobs = async () => {
       setLoading(true)
+
+      if (activeTab === 'messages') {
+        try {
+          const { createClient } = await import('@/lib/supabase/client')
+          const supabase = createClient()
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            const { data: bookingsList } = await supabase
+              .from('bookings')
+              .select('*, job_messages(*), profiles:technician_id(full_name)')
+              .eq('customer_id', user.id)
+              .order('created_at', { ascending: false })
+
+            if (bookingsList) {
+              const threads = bookingsList.map((b: any) => {
+                const msgs = b.job_messages || []
+                const sortedMsgs = [...msgs].sort((x: any, y: any) => new Date(y.created_at).getTime() - new Date(x.created_at).getTime())
+                const latestMsg = sortedMsgs[0]
+
+                return {
+                  id: b.id,
+                  category: b.service_category,
+                  status: b.status,
+                  partnerName: b.profiles?.full_name || 'Technician Partner',
+                  latestText: latestMsg ? latestMsg.content : 'No messages yet',
+                  timestamp: latestMsg ? new Date(latestMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(b.created_at).toLocaleDateString(),
+                  unread: latestMsg ? (latestMsg.sender_id !== user.id && !latestMsg.read_at) : false,
+                }
+              })
+              setChatThreads(threads)
+            }
+          }
+        } catch (e) {
+          console.warn('Failed loading chat history:', e)
+        }
+        setLoading(false)
+        return
+      }
+
       const currentList = await getDbTableAsync<JobRequest>('job_requests')
 
       if (currentList.length === 0) {
@@ -302,6 +343,20 @@ function HistoryPageContent() {
             >
               {t('history.tab_cancelled')}
             </button>
+            <button
+              onClick={() => {
+                setActiveTab('messages')
+                setSelectedJob(null)
+              }}
+              className={cn(
+                "tap flex-1 rounded-lg py-2 text-center text-xs font-bold transition-all",
+                activeTab === 'messages'
+                  ? "bg-card text-primary shadow-sm"
+                  : "text-[#6F767E] hover:text-foreground"
+              )}
+            >
+              Messages
+            </button>
           </div>
 
           {/* List items rendering */}
@@ -310,6 +365,43 @@ function HistoryPageContent() {
             <div className="flex flex-col gap-3">
               <Skeleton className="h-24 w-full rounded-2xl" />
               <Skeleton className="h-24 w-full rounded-2xl" />
+            </div>
+          ) : activeTab === 'messages' ? (
+            <div className="flex flex-col gap-3">
+              {chatThreads.length === 0 ? (
+                <Card className="border border-dashed border-border py-12 text-center soft-shadow bg-card">
+                  <CardContent className="p-0 flex flex-col gap-2.5 items-center">
+                    <MessageSquare className="size-8 text-muted-foreground/55" />
+                    <p className="text-xs text-muted-foreground italic">No conversations found.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                chatThreads.map((thread) => (
+                  <div
+                    key={thread.id}
+                    onClick={() => router.push(`/chat/${thread.id}`)}
+                    className="tap rounded-2xl border border-border bg-card p-4 hover:border-primary/20 transition-all flex items-start gap-3 relative soft-shadow"
+                  >
+                    <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl font-bold", categoryTintClasses[thread.category] || 'bg-primary/10')}>
+                      <MessageSquare className="size-4.5" />
+                    </span>
+                    <div className="flex-1 min-w-0 flex flex-col gap-1 pr-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-foreground truncate">{thread.partnerName}</span>
+                        <span className="text-[10px] text-muted-foreground">{thread.timestamp}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground capitalize font-medium">{thread.category} Service • Status: {thread.status}</p>
+                      <p className={cn("text-xs truncate mt-1", thread.unread ? "font-bold text-foreground" : "text-muted-foreground/80")}>
+                        {thread.latestText}
+                      </p>
+                      {thread.unread && (
+                        <span className="absolute right-3 bottom-4 size-2 rounded-full bg-primary" />
+                      )}
+                    </div>
+                    <ChevronRight className="size-4 text-muted-foreground/50 absolute end-3 top-1/2 -translate-y-1/2" />
+                  </div>
+                ))
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
