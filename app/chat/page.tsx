@@ -83,7 +83,7 @@ export default function ChatPage() {
       localStorage.setItem('ustad_chat_limit_count', '0')
     }
     setRateLimitCount(count)
-    if (count >= 30) {
+    if (count >= 1000) {
       setShowLimitWarning(true)
     }
 
@@ -132,7 +132,7 @@ export default function ChatPage() {
     if (!trimmed) return
 
     // Check rate limit count
-    if (rateLimitCount >= 30) {
+    if (rateLimitCount >= 1000) {
       setShowLimitWarning(true)
       return
     }
