@@ -107,7 +107,15 @@ Available tools:
       })
 
       if (!response.ok) {
-        throw new Error('Groq API request failed')
+        const errText = await response.text()
+        const encoder = new TextEncoder()
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(`Error from Groq API (Status ${response.status}): ${errText}`))
+            controller.close()
+          }
+        })
+        return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
       }
 
       // Stream Groq response back to client
