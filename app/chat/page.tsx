@@ -101,7 +101,12 @@ export default function ChatPage() {
       } else {
         const storedMessages = localStorage.getItem('ustad_chat_history')
         if (storedMessages) {
-          setMessages(JSON.parse(storedMessages))
+          try {
+            setMessages(JSON.parse(storedMessages))
+          } catch (err) {
+            console.error('Failed to parse stored chat history:', err)
+            localStorage.removeItem('ustad_chat_history')
+          }
         } else {
           const defaultGreeting: Message = {
             id: 'welcome',
