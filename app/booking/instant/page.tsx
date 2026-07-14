@@ -156,52 +156,73 @@ function InstantBookingContent() {
     return () => clearInterval(connectionTimer)
   }, [matchedTechId, status])
 
-  // Create Job Request in Local DB
   useEffect(() => {
-    const newRequest: JobRequest = {
-      id: requestId,
-      customer_id: 'CUST-1',
-      service_category: category,
-      lat: 33.7294, // Islamabad F-7 approximate coordinates
-      lng: 73.0561,
-      address: 'House 42, Street 18, F-7/2, Islamabad',
-      status: 'searching',
-      created_at: Date.now(),
-      matched_technician_id: null,
-      search_radius_km: 1.5,
-    }
-    insertDbRow('job_requests', newRequest)
+    const supabaseClient = createClient()
 
-    // Listen to changes on the database
-    const unsubscribe = subscribeToDbTable('job_requests', async () => {
-      const supabaseClient = createClient()
-      const { data: currentReq } = await supabaseClient
-        .from('bookings')
-        .select('*')
-        .eq('id', requestId)
-        .single()
+    const createBookingInDb = async () => {
+      try {
+        const { data: { user } } = await supabaseClient.auth.getUser()
+        const customerId = user?.id
 
-      if (currentReq) {
-        let clientStatus: any = currentReq.status
-        if (clientStatus === 'pending') {
-          clientStatus = 'searching'
-        } else if (clientStatus === 'confirmed') {
-          setStatus((prev) => {
-            if (prev === 'searching') return 'matched'
-            return prev // Keep client-side state machine
-          })
-          if (currentReq.technician_id) {
-            setMatchedTechId(currentReq.technician_id)
-          }
+        if (!customerId) {
+          console.warn('No authenticated user found for booking insert')
           return
         }
 
-        setStatus(clientStatus)
-        if (currentReq.technician_id) {
-          setMatchedTechId(currentReq.technician_id)
+        // Insert into Supabase bookings table (status 'pending' fires matching trigger)
+        const { error } = await supabaseClient.from('bookings').insert({
+          id: requestId,
+          customer_id: customerId,
+          service_category: category,
+          lat: 33.7294, // Islamabad F-7 approximate coordinates
+          lng: 73.0561,
+          address: 'House 42, Street 18, F-7/2, Islamabad',
+          status: 'pending',
+          search_radius_km: 1.5,
+          price_estimate: 1200,
+        })
+
+        if (error) {
+          console.error('Failed to insert booking in Supabase:', error)
         }
+      } catch (err) {
+        console.error('Error during booking initialization:', err)
       }
-    })
+    }
+
+    createBookingInDb()
+
+    // Subscribe to changes on the specific booking row in real-time via Supabase
+    const channel = supabaseClient
+      .channel(`booking_status_${requestId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `id=eq.${requestId}` },
+        (payload) => {
+          const currentReq = payload.new as any
+          if (currentReq) {
+            let clientStatus: any = currentReq.status
+            if (clientStatus === 'pending') {
+              clientStatus = 'searching'
+            } else if (clientStatus === 'confirmed') {
+              setStatus((prev) => {
+                if (prev === 'searching') return 'matched'
+                return prev // Keep client-side state machine
+              })
+              if (currentReq.technician_id) {
+                setMatchedTechId(currentReq.technician_id)
+              }
+              return
+            }
+
+            setStatus(clientStatus)
+            if (currentReq.technician_id) {
+              setMatchedTechId(currentReq.technician_id)
+            }
+          }
+        }
+      )
+      .subscribe()
 
     // Listen to live technician locations
     const unsubscribeLocation = subscribeToLiveLocation(requestId, (lat, lng) => {
@@ -234,7 +255,7 @@ function InstantBookingContent() {
     })
 
     return () => {
-      unsubscribe()
+      supabaseClient.removeChannel(channel)
       unsubscribeLocation()
     }
   }, [])
