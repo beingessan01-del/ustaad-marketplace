@@ -32,6 +32,7 @@ import {
   getDbTable,
   getDbTableAsync,
   insertDbRow,
+  saveDbTable,
   type JobRequest,
 } from '@/lib/storage-sync'
 import { serviceCategories, formatPKR } from '@/lib/data'
@@ -276,6 +277,7 @@ export default function ChatPage() {
 
   const clearChatHistory = () => {
     if (confirm(locale === 'ur' ? 'کیا آپ گفتگو کی ہسٹری صاف کرنا چاہتے ہیں؟' : 'Are you sure you want to clear the chat history?')) {
+      saveDbTable('chat_messages', [])
       localStorage.removeItem('ustad_chat_history')
       const intro: Message = {
         id: 'welcome',
