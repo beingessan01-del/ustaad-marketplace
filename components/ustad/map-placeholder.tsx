@@ -28,6 +28,11 @@ export function MapPlaceholder({
       role="img"
       aria-label="Map showing nearby technicians"
     >
+      <iframe
+        src="https://www.openstreetmap.org/export/embed.html?bbox=73.0381,33.7154,73.0741,33.7434&layer=mapnik"
+        className="absolute inset-0 w-full h-full border-0 pointer-events-none opacity-80"
+      />
+
       {/* center user location with pulsing dot */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
         <span className="relative flex size-4 items-center justify-center">
