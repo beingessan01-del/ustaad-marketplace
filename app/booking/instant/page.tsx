@@ -70,6 +70,10 @@ function InstantBookingContent() {
   // Map coordinates simulation for fallback/single-tab
   const [mapPinPos, setMapPinPos] = useState<{ top: string; left: string }>({ top: '15%', left: '15%' })
 
+  const [custLat, setCustLat] = useState(33.7294)
+  const [custLng, setCustLng] = useState(73.0561)
+  const [showSimSettings, setShowSimSettings] = useState(false)
+
   const matchedTech = matchedTechId ? getTechnician(matchedTechId) : null
 
   // Elapsed timer
@@ -169,13 +173,29 @@ function InstantBookingContent() {
           return
         }
 
+        // Load simulated customer coordinates from localStorage if present
+        let initialLat = 33.7294
+        let initialLng = 73.0561
+        if (typeof window !== 'undefined') {
+          const storedLat = localStorage.getItem('ustad_customer_lat')
+          const storedLng = localStorage.getItem('ustad_customer_lng')
+          if (storedLat) {
+            initialLat = Number(storedLat)
+            setCustLat(initialLat)
+          }
+          if (storedLng) {
+            initialLng = Number(storedLng)
+            setCustLng(initialLng)
+          }
+        }
+
         // Insert into Supabase bookings table (status 'pending' fires matching trigger)
         const { error } = await supabaseClient.from('bookings').insert({
           id: requestId,
           customer_id: customerId,
           service_category: category,
-          lat: 33.7294, // Islamabad F-7 approximate coordinates
-          lng: 73.0561,
+          lat: initialLat,
+          lng: initialLng,
           address: 'House 42, Street 18, F-7/2, Islamabad',
           status: 'pending',
           search_radius_km: 1.5,
@@ -346,6 +366,69 @@ function InstantBookingContent() {
               <div className="relative flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground soft-shadow">
                 <serviceCategory.icon className="size-6 animate-pulse" />
               </div>
+            </div>
+
+            {/* Simulated Customer Location Panel */}
+            <div className="w-full max-w-xs mx-auto border border-border/80 rounded-2xl bg-card p-3.5 flex flex-col gap-2.5 my-2">
+              <button
+                type="button"
+                onClick={() => setShowSimSettings(!showSimSettings)}
+                className="flex items-center justify-between text-xs font-semibold text-foreground w-full outline-none"
+              >
+                <span>Demo Controls: Simulated Location</span>
+                <span className="text-primary font-mono text-[10px]">
+                  {showSimSettings ? '▼ Collapse' : '▶ Expand'}
+                </span>
+              </button>
+
+              {showSimSettings && (
+                <div className="flex flex-col gap-2 pt-1.5 border-t border-border/40 animate-fadeIn">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] font-bold text-muted-foreground uppercase">Latitude</label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={custLat}
+                        onChange={(e) => setCustLat(Number(e.target.value))}
+                        className="h-8 w-full rounded-lg border border-border bg-muted px-2 text-[11px] outline-none text-foreground focus:bg-background"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] font-bold text-muted-foreground uppercase">Longitude</label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={custLng}
+                        onChange={(e) => setCustLng(Number(e.target.value))}
+                        className="h-8 w-full rounded-lg border border-border bg-muted px-2 text-[11px] outline-none text-foreground focus:bg-background"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="tap h-8 w-full mt-1 text-xs"
+                    onClick={async () => {
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('ustad_customer_lat', String(custLat))
+                        localStorage.setItem('ustad_customer_lng', String(custLng))
+                      }
+                      const supabaseClient = createClient()
+                      const { error } = await supabaseClient
+                        .from('bookings')
+                        .update({ lat: custLat, lng: custLng })
+                        .eq('id', requestId)
+                      if (error) {
+                        alert('Error updating customer location: ' + error.message)
+                      } else {
+                        alert('Customer location updated!')
+                      }
+                    }}
+                  >
+                    Update Location
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col items-center gap-6">

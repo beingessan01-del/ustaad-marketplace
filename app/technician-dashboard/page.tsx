@@ -68,6 +68,9 @@ export default function TechnicianDashboardPage() {
   const [categories, setCategories] = useState<string[]>([])
   const [radius, setRadius] = useState(10)
   const [savingSettings, setSavingSettings] = useState(false)
+  const [mockGps, setMockGps] = useState(true)
+  const [mockLat, setMockLat] = useState(33.7294)
+  const [mockLng, setMockLng] = useState(73.0561)
 
   // Fetch messages thread history
   useEffect(() => {
@@ -125,7 +128,19 @@ export default function TechnicianDashboardPage() {
         setExperience(det.years_experience || 1)
         setCategories(det.service_categories || [])
         setRadius(Number(det.service_radius_km) || 10)
-      } else {
+      }
+
+      // Load mock location config
+      if (typeof window !== 'undefined') {
+        const storedMockGps = localStorage.getItem('ustad_mock_gps')
+        const storedMockLat = localStorage.getItem('ustad_mock_lat')
+        const storedMockLng = localStorage.getItem('ustad_mock_lng')
+        if (storedMockGps !== null) setMockGps(storedMockGps === 'true')
+        if (storedMockLat !== null) setMockLat(Number(storedMockLat))
+        if (storedMockLng !== null) setMockLng(Number(storedMockLng))
+      }
+
+      if (!det) {
         // Create default details if missing
         const defaultDet = {
           profile_id: user.id,
@@ -173,6 +188,24 @@ export default function TechnicianDashboardPage() {
       return
     }
 
+    if (mockGps) {
+      // Mock location periodic updates
+      const mockInterval = setInterval(async () => {
+        await supabase.from('technician_status').upsert({
+          technician_id: userId,
+          is_online: true,
+          current_lat: mockLat,
+          current_lng: mockLng,
+          last_ping_at: new Date().toISOString(),
+          active_job_id: activeJobId || null,
+        })
+      }, 4000)
+
+      return () => {
+        clearInterval(mockInterval)
+      }
+    }
+
     if (typeof window !== 'undefined' && navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
         async (position) => {
@@ -207,7 +240,7 @@ export default function TechnicianDashboardPage() {
         navigator.geolocation.clearWatch(geoWatchId)
       }
     }
-  }, [isOnline, userId, activeJobId])
+  }, [isOnline, userId, activeJobId, mockGps, mockLat, mockLng])
 
   // 3. Stats and History Queries
   useEffect(() => {
@@ -439,6 +472,13 @@ export default function TechnicianDashboardPage() {
     e.preventDefault()
     if (!userId) return
     setSavingSettings(true)
+
+    // Save mocks to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ustad_mock_gps', String(mockGps))
+      localStorage.setItem('ustad_mock_lat', String(mockLat))
+      localStorage.setItem('ustad_mock_lng', String(mockLng))
+    }
 
     const { error } = await supabase.from('technician_details').upsert({
       profile_id: userId,
@@ -862,6 +902,49 @@ export default function TechnicianDashboardPage() {
                 onChange={(e) => setRadius(Number(e.target.value))}
                 className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
               />
+            </div>
+
+            {/* GPS Simulator Location Mock Settings */}
+            <div className="flex flex-col gap-3.5 border-t border-border pt-4 mt-2">
+              <div className="flex items-center gap-2">
+                <input
+                  id="mockGps"
+                  type="checkbox"
+                  checked={mockGps}
+                  onChange={(e) => setMockGps(e.target.checked)}
+                  className="rounded border-border accent-primary cursor-pointer size-4"
+                />
+                <label htmlFor="mockGps" className="text-xs font-semibold text-foreground cursor-pointer select-none">
+                  Mock GPS Location (For Testing/Demo)
+                </label>
+              </div>
+
+              {mockGps && (
+                <div className="grid grid-cols-2 gap-3 animate-fadeIn">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="mockLat" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Latitude</label>
+                    <input
+                      id="mockLat"
+                      type="number"
+                      step="0.0001"
+                      value={mockLat}
+                      onChange={(e) => setMockLat(Number(e.target.value))}
+                      className="h-10 w-full rounded-xl border border-border bg-muted px-3 text-xs outline-none focus:border-primary focus:bg-background text-foreground"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="mockLng" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Longitude</label>
+                    <input
+                      id="mockLng"
+                      type="number"
+                      step="0.0001"
+                      value={mockLng}
+                      onChange={(e) => setMockLng(Number(e.target.value))}
+                      className="h-10 w-full rounded-xl border border-border bg-muted px-3 text-xs outline-none focus:border-primary focus:bg-background text-foreground"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <Button
