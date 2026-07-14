@@ -29,6 +29,12 @@ export default function HomePage() {
   const [techList, setTechList] = useState(technicians)
 
   useEffect(() => {
+    const role = localStorage.getItem('ustad_account_type')
+    if (role === 'technician') {
+      router.push('/technician-dashboard')
+      return
+    }
+
     async function fetchTechnicians() {
       try {
         const { createClient } = await import('@/lib/supabase/client')

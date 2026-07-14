@@ -5,9 +5,6 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Wrench,
-  Zap,
-  MapPin,
-  AlertTriangle,
   User,
   CheckCircle,
   Clock,
@@ -16,195 +13,313 @@ import {
   Power,
   Shield,
   MessageSquare,
+  DollarSign,
+  Star,
+  MapPin,
+  ExternalLink,
+  ChevronRight
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AppTopbar } from '@/components/ustad/app-topbar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  technicians,
-  formatPKR,
-  type Technician,
-  defaultSchedule,
-} from '@/lib/data'
-import {
-  getDbTable,
-  saveDbTable,
-  insertDbRow,
-  updateDbRow,
-  subscribeToDbTable,
-  broadcastLiveLocation,
-  type JobRequest,
-  type JobOffer,
-  type TechnicianStatus,
-} from '@/lib/storage-sync'
+import { createClient } from '@/lib/supabase/client'
 import { MapPlaceholder } from '@/components/ustad/map-placeholder'
+
+type Tab = 'dashboard' | 'history' | 'profile'
 
 export default function TechnicianDashboardPage() {
   const router = useRouter()
+  const supabase = createClient()
 
-  // Selected technician simulation profile
-  const [selectedTechId, setSelectedTechId] = useState<string>('usman-khan')
-  const [techList, setTechList] = useState(technicians)
-  const activeTech = techList.find((t) => t.id === selectedTechId) || techList[0]
+  // User Profile States
+  const [userId, setUserId] = useState<string | null>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [details, setDetails] = useState<any>(null)
+  
+  // Tab control
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard')
 
-  useEffect(() => {
-    async function loadUserProfile() {
-      try {
-        const { createClient } = await import('@/lib/supabase/client')
-        const supabase = createClient()
-        const userSession = await supabase.auth.getUser()
-        if (userSession.data.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userSession.data.user.id)
-            .single()
-
-          if (profile && profile.account_type === 'technician') {
-            const existingIdx = technicians.findIndex(t => t.id === profile.id)
-            if (existingIdx === -1) {
-              const newTech: Technician = {
-                id: profile.id,
-                name: profile.name || 'My Tech Account',
-                initials: (profile.name || 'My Tech Account').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
-                specialty: 'Home Service Partner',
-                category: 'plumbing',
-                rating: 5.0,
-                reviewCount: 0,
-                distanceKm: 0.1,
-                status: 'available',
-                inspectionFee: 200,
-                area: 'Islamabad',
-                experienceYears: 1,
-                jobsCompleted: 0,
-                about: 'USTAD Registered Service Professional Partner',
-                avatarTint: 'bg-[#EAF1FE] text-primary',
-                schedule: defaultSchedule,
-                reviews: [],
-              }
-              setTechList([newTech, ...technicians])
-              setSelectedTechId(profile.id)
-            } else {
-              setSelectedTechId(profile.id)
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Failed loading technician profile from database:', e)
-      }
-    }
-    loadUserProfile()
-  }, [])
-
-  // Statuses
+  // Status & Heartbeats
   const [isOnline, setIsOnline] = useState(false)
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
-  
-  // Pending request modal
-  const [incomingRequest, setIncomingRequest] = useState<JobRequest | null>(null)
+  const [activeJob, setActiveJob] = useState<any>(null)
+  const [geoWatchId, setGeoWatchId] = useState<number | null>(null)
+
+  // Incoming Requests & Offers
+  const [offers, setOffers] = useState<any[]>([])
+  const [incomingOffer, setIncomingOffer] = useState<any>(null)
   const [countdown, setCountdown] = useState(20)
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Simulation driving parameters
-  const [isDriving, setIsDriving] = useState(false)
-  const [driveProgress, setDriveProgress] = useState(0)
+  // Stats Counters
+  const [earningsToday, setEarningsToday] = useState(0)
+  const [completedToday, setCompletedToday] = useState(0)
+  
+  // History logs
+  const [historyJobs, setHistoryJobs] = useState<any[]>([])
+  const [earningsSummary, setEarningsSummary] = useState({ week: 0, month: 0 })
 
-  // Active Job Details
-  const activeJob = activeJobId 
-    ? getDbTable<JobRequest>('job_requests').find((r) => r.id === activeJobId) 
-    : null
+  // Settings Forms
+  const [bio, setBio] = useState('')
+  const [specialty, setSpecialty] = useState('')
+  const [experience, setExperience] = useState(1)
+  const [categories, setCategories] = useState<string[]>([])
+  const [radius, setRadius] = useState(10)
+  const [savingSettings, setSavingSettings] = useState(false)
 
-  // Heartbeat ping interval
+  // 1. Fetch User and initial DB data
   useEffect(() => {
-    if (!isOnline) {
-      // Remove online status
-      const statuses = getDbTable<TechnicianStatus>('technician_status')
-      const filtered = statuses.filter((s) => s.technician_id !== selectedTechId)
-      saveDbTable('technician_status', filtered)
-      return
-    }
-
-    // Insert or update heartbeat immediately
-    const sendHeartbeat = () => {
-      const statuses = getDbTable<TechnicianStatus>('technician_status')
-      const index = statuses.findIndex((s) => s.technician_id === selectedTechId)
+    async function initUser() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/login')
+        return
+      }
+      setUserId(user.id)
       
-      const newStatus: TechnicianStatus = {
-        technician_id: selectedTechId,
-        is_online: true,
-        current_lat: 33.7200, // Slightly offset
-        current_lng: 73.0500,
-        last_ping_at: Date.now(),
-        active_job_id: activeJobId,
-      }
+      // Load Profile
+      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+      setProfile(prof)
 
-      if (index !== -1) {
-        statuses[index] = newStatus
+      // Load Technician Details
+      const { data: det } = await supabase.from('technician_details').select('*').eq('profile_id', user.id).single()
+      if (det) {
+        setDetails(det)
+        setBio(det.bio || '')
+        setSpecialty(det.specialty || '')
+        setExperience(det.years_experience || 1)
+        setCategories(det.service_categories || [])
+        setRadius(Number(det.service_radius_km) || 10)
       } else {
-        statuses.push(newStatus)
+        // Create default details if missing
+        const defaultDet = {
+          profile_id: user.id,
+          specialty: 'Plumbing Specialist',
+          bio: 'Registered USTAD Partner',
+          years_experience: 2,
+          service_categories: ['plumbing'],
+          service_radius_km: 10,
+        }
+        await supabase.from('technician_details').upsert(defaultDet)
+        setBio(defaultDet.bio)
+        setSpecialty(defaultDet.specialty)
+        setExperience(defaultDet.years_experience)
+        setCategories(defaultDet.service_categories)
+        setRadius(defaultDet.service_radius_km)
       }
-      saveDbTable('technician_status', statuses)
-    }
 
-    sendHeartbeat()
-    const interval = setInterval(sendHeartbeat, 5000) // 5s heartbeat
-
-    return () => clearInterval(interval)
-  }, [isOnline, selectedTechId, activeJobId])
-
-  // Sync active job status from local DB
-  useEffect(() => {
-    const syncJobState = () => {
-      if (!activeJobId) return
-      const requests = getDbTable<JobRequest>('job_requests')
-      const job = requests.find((r) => r.id === activeJobId)
-      if (job) {
-        if (job.status === 'cancelled') {
-          alert('Customer has cancelled the dispatch request.')
-          handleResetDashboard()
-        } else if (job.status === 'completed' || job.status === 'expired') {
-          handleResetDashboard()
+      // Check current active job or status
+      const { data: status } = await supabase.from('technician_status').select('*').eq('technician_id', user.id).single()
+      if (status) {
+        setIsOnline(status.is_online)
+        if (status.active_job_id) {
+          setActiveJobId(status.active_job_id)
         }
       }
     }
+    initUser()
+  }, [])
 
-    const unsubscribe = subscribeToDbTable('job_requests', syncJobState)
-    return () => unsubscribe()
-  }, [activeJobId])
-
-  // Watch for incoming job requests
+  // 2. Geolocation Watcher when Online
   useEffect(() => {
-    if (!isOnline || activeJobId || incomingRequest) return
+    if (!isOnline || !userId) {
+      if (geoWatchId !== null && typeof window !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.clearWatch(geoWatchId)
+        setGeoWatchId(null)
+      }
+      // Update status to offline in database
+      if (userId) {
+        supabase.from('technician_status').upsert({
+          technician_id: userId,
+          is_online: false,
+          last_ping_at: new Date().toISOString(),
+        }).then(() => {})
+      }
+      return
+    }
 
-    const checkForRequests = () => {
-      const requests = getDbTable<JobRequest>('job_requests')
-      // Find a searching request that matches this technician's category
-      const pending = requests.find(
-        (r) => r.status === 'searching' && r.service_category === activeTech.category
+    if (typeof window !== 'undefined' && navigator.geolocation) {
+      const watchId = navigator.geolocation.watchPosition(
+        async (position) => {
+          const lat = position.coords.latitude
+          const lng = position.coords.longitude
+
+          // Upsert online status and heartbeat
+          await supabase.from('technician_status').upsert({
+            technician_id: userId,
+            is_online: true,
+            current_lat: lat,
+            current_lng: lng,
+            last_ping_at: new Date().toISOString(),
+            active_job_id: activeJobId || null,
+          })
+        },
+        (error) => {
+          console.error('GPS error:', error)
+          setIsOnline(false)
+          alert('GPS Location access is required to go Online and receive job requests. Please check browser permissions.')
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       )
+      setGeoWatchId(watchId)
+    } else {
+      alert('Your browser does not support GPS location.')
+      setIsOnline(false)
+    }
 
-      if (pending) {
-        // Trigger modal & countdown
-        setIncomingRequest(pending)
-        setCountdown(20)
+    return () => {
+      if (geoWatchId !== null && typeof window !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.clearWatch(geoWatchId)
+      }
+    }
+  }, [isOnline, userId, activeJobId])
+
+  // 3. Stats and History Queries
+  useEffect(() => {
+    if (!userId) return
+
+    async function loadStatsAndHistory() {
+      // Load completed bookings for this technician
+      const { data: completedBookings } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('technician_id', userId)
+        .order('created_at', { ascending: false })
+
+      if (completedBookings) {
+        const today = new Date().toISOString().split('T')[0]
+        
+        // Filter jobs completed today
+        const todayJobs = completedBookings.filter((b: any) => b.status === 'completed' && b.created_at.startsWith(today))
+        setCompletedToday(todayJobs.length)
+        
+        // Calculate earnings today
+        const todayEarned = todayJobs.reduce((acc: number, cur: any) => acc + (Number(cur.price) || 0), 0)
+        setEarningsToday(todayEarned)
+
+        // Map to history list
+        const historyList = completedBookings.map((b: any) => ({
+          id: b.id,
+          category: b.service_category,
+          date: new Date(b.created_at).toLocaleDateString(),
+          price: b.price || 0,
+          status: b.status,
+          initials: 'CUST',
+        }))
+        setHistoryJobs(historyList)
+
+        // Calculate weekly / monthly sum
+        const weekAgo = new Date()
+        weekAgo.setDate(weekAgo.getDate() - 7)
+        const monthAgo = new Date()
+        monthAgo.setDate(monthAgo.getDate() - 30)
+
+        const weekEarned = completedBookings
+          .filter((b: any) => b.status === 'completed' && new Date(b.created_at) >= weekAgo)
+          .reduce((acc: number, cur: any) => acc + (Number(cur.price) || 0), 0)
+
+        const monthEarned = completedBookings
+          .filter((b: any) => b.status === 'completed' && new Date(b.created_at) >= monthAgo)
+          .reduce((acc: number, cur: any) => acc + (Number(cur.price) || 0), 0)
+
+        setEarningsSummary({ week: weekEarned, month: monthEarned })
       }
     }
 
-    checkForRequests()
-    const unsubscribe = subscribeToDbTable('job_requests', checkForRequests)
-    return () => unsubscribe()
-  }, [isOnline, activeJobId, incomingRequest, activeTech.category])
+    loadStatsAndHistory()
+  }, [userId, activeJobId, activeTab])
 
-  // Modal Countdown Timer
+  // 4. Subscribing to Active Job state Changes
   useEffect(() => {
-    if (!incomingRequest) return
+    if (!activeJobId) {
+      setActiveJob(null)
+      return
+    }
+
+    async function loadActiveJob() {
+      const { data } = await supabase.from('bookings').select('*').eq('id', activeJobId).single()
+      if (data) {
+        setActiveJob(data)
+        if (data.status === 'completed' || data.status === 'cancelled' || data.status === 'expired') {
+          setActiveJobId(null)
+          setActiveJob(null)
+        }
+      }
+    }
+    loadActiveJob()
+
+    const channel = supabase
+      .channel('active_job_updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `id=eq.${activeJobId}` },
+        (payload) => {
+          const updated = payload.new as any
+          setActiveJob(updated)
+          if (updated.status === 'completed' || updated.status === 'cancelled' || updated.status === 'expired') {
+            setActiveJobId(null)
+            setActiveJob(null)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [activeJobId])
+
+  // 5. Setup Realtime subscription to incoming job_offers
+  useEffect(() => {
+    if (!userId || !isOnline || activeJobId) {
+      setOffers([])
+      setIncomingOffer(null)
+      return
+    }
+
+    async function loadOffers() {
+      const { data } = await supabase
+        .from('job_offers')
+        .select('*, bookings:job_request_id(*)')
+        .eq('technician_id', userId)
+        .eq('status', 'pending')
+
+      if (data && data.length > 0) {
+        setOffers(data)
+        setIncomingOffer(data[0])
+        setCountdown(20)
+      } else {
+        setIncomingOffer(null)
+      }
+    }
+    loadOffers()
+
+    const channel = supabase
+      .channel('technician_job_offers')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'job_offers', filter: `technician_id=eq.${userId}` },
+        () => {
+          loadOffers()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [userId, isOnline, activeJobId])
+
+  // 6. Countdown modal timer
+  useEffect(() => {
+    if (!incomingOffer) return
 
     countdownIntervalRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(countdownIntervalRef.current!)
-          handleDeclineInvite()
+          handleDeclineOffer()
           return 0
         }
         return prev - 1
@@ -214,310 +329,447 @@ export default function TechnicianDashboardPage() {
     return () => {
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current)
     }
-  }, [incomingRequest])
+  }, [incomingOffer])
 
-  // Dispatch driving coordinates heartbeat simulation (Customer tracking)
-  useEffect(() => {
-    if (!isDriving || !activeJobId) return
-
-    const startLat = 33.7200
-    const startLng = 73.0500
-    const destLat = 33.7294 // Customer address
-    const destLng = 73.0561
-
-    const steps = 40
-    let currentStep = 0
-
-    const driveTimer = setInterval(() => {
-      currentStep++
-      const progress = currentStep / steps
-      const currentLat = startLat + (destLat - startLat) * progress
-      const currentLng = startLng + (destLng - startLng) * progress
-
-      // Broadcast position ping
-      broadcastLiveLocation(activeJobId, currentLat, currentLng)
-
-      if (currentStep >= steps) {
-        clearInterval(driveTimer)
-        setIsDriving(false)
-      }
-    }, 800)
-
-    return () => clearInterval(driveTimer)
-  }, [isDriving, activeJobId])
-
-  const handleDeclineInvite = () => {
-    setIncomingRequest(null)
-    setCountdown(20)
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current)
+  const handleDeclineOffer = async () => {
+    if (!incomingOffer) return
+    await supabase.from('job_offers').update({ status: 'declined' }).eq('id', incomingOffer.id)
+    setIncomingOffer(null)
   }
 
-  const handleAcceptInvite = () => {
-    if (!incomingRequest) return
+  const handleAcceptOffer = async () => {
+    if (!incomingOffer || !userId) return
 
-    // ATOMIC matched check: read latest database state
-    const requests = getDbTable<JobRequest>('job_requests')
-    const latestReq = requests.find((r) => r.id === incomingRequest.id)
+    // 1. Concurrency Check: Verify booking status is still 'searching'
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('status')
+      .eq('id', incomingOffer.job_request_id)
+      .single()
 
-    if (!latestReq || latestReq.status !== 'searching') {
-      alert('Invite no longer available. Another technician accepted first.')
-      handleDeclineInvite()
+    if (!booking || booking.status !== 'searching') {
+      alert('This job has already been taken by another provider.')
+      await handleDeclineOffer()
       return
     }
 
-    // Success! Accept job atomically
-    updateDbRow<JobRequest>('job_requests', 'id', incomingRequest.id, {
-      status: 'matched',
-      matched_technician_id: activeTech.id,
-    })
-
-    setActiveJobId(incomingRequest.id)
-    setIncomingRequest(null)
-
-    // Trigger driving simulation
-    setIsDriving(true)
-
-    // Automatically transition to en_route
-    setTimeout(() => {
-      updateDbRow<JobRequest>('job_requests', 'id', incomingRequest.id, {
-        status: 'en_route',
+    // 2. Accept atomically
+    await supabase
+      .from('bookings')
+      .update({
+        status: 'matched',
+        technician_id: userId
       })
-    }, 1500)
+      .eq('id', incomingOffer.job_request_id)
+
+    await supabase
+      .from('job_offers')
+      .update({ status: 'accepted' })
+      .eq('id', incomingOffer.id)
+
+    // Decline other offers for this request
+    await supabase
+      .from('job_offers')
+      .update({ status: 'declined' })
+      .eq('job_request_id', incomingOffer.job_request_id)
+      .neq('id', incomingOffer.id)
+
+    setActiveJobId(incomingOffer.job_request_id)
+    setIncomingOffer(null)
   }
 
-  const handleStatusChange = (newStatus: 'arrived' | 'in_progress' | 'completed') => {
+  const handleStatusChange = async (newStatus: 'en_route' | 'arrived' | 'in_progress' | 'completed') => {
     if (!activeJobId) return
-    updateDbRow<JobRequest>('job_requests', 'id', activeJobId, { status: newStatus })
-
+    await supabase.from('bookings').update({ status: newStatus }).eq('id', activeJobId)
+    
     if (newStatus === 'completed') {
-      alert('Job completed successfully! Cash payment of ' + formatPKR(activeTech.inspectionFee + 500) + ' collected.')
-      handleResetDashboard()
+      alert('Job completed successfully! Cash collected.')
+      setActiveJobId(null)
+      setActiveJob(null)
     }
   }
 
-  const handleResetDashboard = () => {
-    setActiveJobId(null)
-    setIsDriving(false)
-    setDriveProgress(0)
-    setIncomingRequest(null)
+  // Save Settings
+  const saveSettings = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!userId) return
+    setSavingSettings(true)
+
+    const { error } = await supabase.from('technician_details').upsert({
+      profile_id: userId,
+      specialty: specialty,
+      bio: bio,
+      years_experience: experience,
+      service_categories: categories,
+      service_radius_km: radius,
+    })
+
+    setSavingSettings(false)
+    if (!error) {
+      alert('Settings saved successfully!')
+    } else {
+      alert('Failed to save settings: ' + error.message)
+    }
+  }
+
+  const toggleCategory = (cat: string) => {
+    setCategories((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    )
   }
 
   return (
-    <div className="min-h-svh bg-background pb-10">
+    <div className="min-h-svh bg-background pb-20">
       <AppTopbar />
 
       <main className="mx-auto w-full max-w-xl px-4 py-5 flex flex-col gap-4">
-        {/* Profile Switcher Header */}
-        <Card className="soft-shadow border-border">
-          <CardContent className="p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground font-medium">Technician Profile Simulator</span>
-              <div className="flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary uppercase">
-                Active ID: {activeTech.initials}
-              </div>
-            </div>
-            <select
-              value={selectedTechId}
-              onChange={(e) => {
-                setSelectedTechId(e.target.value)
-                handleResetDashboard()
-              }}
-              className="w-full rounded-xl border border-border bg-muted p-2.5 text-sm text-foreground outline-none focus:border-primary focus:bg-background"
-            >
-              {techList.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.specialty})
-                </option>
-              ))}
-            </select>
-          </CardContent>
-        </Card>
+        {activeTab === 'dashboard' && (
+          <>
+            {/* Online/Offline Status Header */}
+            {!activeJobId ? (
+              <div className="flex flex-col gap-4 flex-1">
+                <Card className={cn(
+                  "border-2 transition-all soft-shadow",
+                  isOnline ? "border-success/30 bg-success/5" : "border-border bg-card"
+                )}>
+                  <CardContent className="p-5 flex items-center justify-between">
+                    <div className="flex flex-col gap-1">
+                      <h2 className="text-base font-bold text-foreground">
+                        {isOnline ? "You are Online" : "You are Offline"}
+                      </h2>
+                      <p className="text-xs text-muted-foreground">
+                        {isOnline ? "Visible to nearby clients for job dispatches." : "Toggle switch to watch device location."}
+                      </p>
+                    </div>
 
-        {/* Dashboard Actions HUD */}
-        {!activeJobId ? (
-          <div className="flex flex-col gap-4 py-4 flex-1">
-            {/* Status card */}
-            <Card className={cn(
-              "border-2 transition-all soft-shadow",
-              isOnline ? "border-success/30 bg-success/5" : "border-border bg-card"
-            )}>
-              <CardContent className="p-5 flex items-center justify-between">
-                <div className="flex flex-col gap-1">
-                  <h2 className="text-base font-bold text-foreground">
-                    {isOnline ? "You are Online" : "You are Offline"}
+                    <button
+                      onClick={() => setIsOnline((prev) => !prev)}
+                      className={cn(
+                        "tap flex size-12 shrink-0 items-center justify-center rounded-full text-white transition-colors soft-shadow",
+                        isOnline ? "bg-success hover:bg-success/95" : "bg-muted-foreground/40 hover:bg-muted-foreground/50"
+                      )}
+                      aria-label="Toggle Online status"
+                    >
+                      <Power className="size-5" />
+                    </button>
+                  </CardContent>
+                </Card>
+
+                {/* Quick stats */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Card className="soft-shadow border-border bg-card">
+                    <CardContent className="p-4 flex flex-col gap-1">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Earnings Today</span>
+                      <span className="text-xl font-bold text-foreground">Rs. {earningsToday}</span>
+                    </CardContent>
+                  </Card>
+                  <Card className="soft-shadow border-border bg-card">
+                    <CardContent className="p-4 flex flex-col gap-1">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Jobs Completed</span>
+                      <span className="text-xl font-bold text-foreground">{completedToday}</span>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {isOnline ? (
+                  <div className="flex-1 flex flex-col items-center justify-center py-12 text-center gap-4">
+                    <span className="relative flex size-10 items-center justify-center">
+                      <span className="absolute inline-flex inset-0 rounded-full bg-success/30 animate-ping" />
+                      <span className="relative inline-flex size-6 rounded-full bg-success soft-shadow" />
+                    </span>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">Visible to nearby customers</h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        GPS watch position is active
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 text-center gap-4 bg-muted/20 border border-border/60 rounded-3xl">
+                    <Shield className="size-10 text-muted-foreground/60" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">Offline</h3>
+                      <p className="text-xs text-muted-foreground max-w-xs mt-1 leading-normal">
+                        Go online above to request location tracking permission and begin receiving instant dispatches.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Active Job Dispatch Panel */
+              <div className="flex flex-col gap-4 flex-1">
+                {/* Route navigation Map */}
+                <div className="relative h-60 w-full rounded-2xl overflow-hidden border border-border">
+                  <MapPlaceholder
+                    className="h-full border-0"
+                    pins={[
+                      { top: '50%', left: '50%', active: true },
+                      { top: '40%', left: '40%' }
+                    ]}
+                  />
+                  <div className="absolute top-3 left-3 z-10">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-md">
+                      <Navigation className="size-3.5 animate-pulse" />
+                      Navigation Active
+                    </span>
+                  </div>
+                </div>
+
+                {/* Dispatch Details Header */}
+                <div className="flex flex-col gap-1 px-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                      Dispatch route status
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded bg-[#EAF1FE] px-2 py-0.5 text-[10px] font-bold text-primary uppercase">
+                      {activeJob?.status}
+                    </span>
+                  </div>
+                  <h2 className="text-lg font-bold text-foreground mt-1">
+                    {activeJob?.status === 'matched' && "Customer accepted dispatch request"}
+                    {activeJob?.status === 'en_route' && "En route to client location"}
+                    {activeJob?.status === 'arrived' && "You have arrived"}
+                    {activeJob?.status === 'in_progress' && "Performing service"}
                   </h2>
-                  <p className="text-xs text-muted-foreground">
-                    {isOnline ? "Ready to receive instant dispatch requests." : "Toggle switch to start location heartbeat."}
-                  </p>
                 </div>
 
-                <button
-                  onClick={() => setIsOnline((prev) => !prev)}
-                  className={cn(
-                    "tap flex size-12 shrink-0 items-center justify-center rounded-full text-white transition-colors soft-shadow",
-                    isOnline ? "bg-success hover:bg-success/95" : "bg-muted-foreground/40 hover:bg-muted-foreground/50"
+                {/* Address Card */}
+                <Card className="soft-shadow border-border bg-muted/20">
+                  <CardContent className="p-4 flex flex-col gap-3 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Category</span>
+                      <span className="font-bold text-foreground capitalize">{activeJob?.service_category}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Description</span>
+                      <span className="font-semibold text-foreground">{activeJob?.description || 'No notes'}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-border/40 pt-2.5">
+                      <span className="text-muted-foreground">Client Address</span>
+                      <span className="font-bold text-foreground">{activeJob?.address || activeJob?.location || 'F-7, Islamabad'}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-border/40 pt-2.5">
+                      <span className="text-muted-foreground">Collectable Fee</span>
+                      <span className="font-bold text-foreground text-sm">Rs. {activeJob?.price || 0}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Step Actions */}
+                <div className="flex flex-col gap-2 mt-2">
+                  {activeJob?.status === 'matched' && (
+                    <Button
+                      size="lg"
+                      className="tap h-12 w-full bg-primary hover:bg-primary/95 text-white"
+                      onClick={() => handleStatusChange('en_route')}
+                    >
+                      Start Navigating
+                    </Button>
                   )}
-                  aria-label="Toggle Online status"
-                >
-                  <Power className="size-5" />
-                </button>
-              </CardContent>
-            </Card>
 
-            {/* Offline Helper notice */}
-            {!isOnline && (
-              <div className="flex items-start gap-2.5 rounded-xl bg-muted/50 p-4 border border-border/40 text-xs text-muted-foreground leading-normal">
-                <Shield className="size-4 shrink-0 text-primary mt-0.5" />
-                <p>
-                  Dispatch matching requires PostGIS simulated heartbeats. 
-                  Toggle **Online** above to make this profile searchable for the customer page search radius check.
-                </p>
-              </div>
-            )}
+                  {activeJob?.status === 'en_route' && (
+                    <Button
+                      size="lg"
+                      className="tap h-12 w-full bg-success hover:bg-success/95 text-white"
+                      onClick={() => handleStatusChange('arrived')}
+                    >
+                      I Have Arrived
+                    </Button>
+                  )}
 
-            {/* Waiting heartbeat loader animation */}
-            {isOnline && (
-              <div className="flex-1 flex flex-col items-center justify-center py-12 text-center gap-4">
-                <span className="relative flex size-10 items-center justify-center">
-                  <span className="absolute inline-flex inset-0 rounded-full bg-success/30 animate-ping" />
-                  <span className="relative inline-flex size-6 rounded-full bg-success soft-shadow" />
-                </span>
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">Waiting for incoming jobs...</h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Simulating GPS heartbeat ping at (33.72, 73.05) every 5s
-                  </p>
+                  {activeJob?.status === 'arrived' && (
+                    <Button
+                      size="lg"
+                      className="tap h-12 w-full bg-primary hover:bg-primary/95 text-white"
+                      onClick={() => handleStatusChange('in_progress')}
+                    >
+                      Start Job
+                    </Button>
+                  )}
+
+                  {activeJob?.status === 'in_progress' && (
+                    <Button
+                      size="lg"
+                      className="tap h-12 w-full bg-success hover:bg-success/95 text-white"
+                      onClick={() => handleStatusChange('completed')}
+                    >
+                      Complete Job & Collect Cash
+                    </Button>
+                  )}
+
+                  {/* External navigation links */}
+                  {activeJob && (
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${activeJob.lat},${activeJob.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border text-xs font-semibold hover:bg-muted/50 transition-colors"
+                    >
+                      <ExternalLink className="size-4" />
+                      Open in Google Maps Navigation
+                    </a>
+                  )}
+
+                  {/* Contact client links */}
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <Button variant="outline" className="tap justify-center bg-transparent h-11" render={<a href={`tel:+923001234567`} />} />
+                    <Button variant="outline" className="tap justify-center bg-transparent h-11" render={<a href={`sms:+923001234567`} />} />
+                  </div>
                 </div>
               </div>
             )}
-          </div>
-        ) : (
-          /* Active Dispatch Navigation Flow */
-          <div className="flex flex-col gap-4 flex-1">
-            {/* Live Navigation Map */}
-            <div className="relative h-60 w-full rounded-2xl overflow-hidden border border-border">
-              <MapPlaceholder
-                className="h-full border-0"
-                pins={[
-                  { top: '50%', left: '50%', active: true }, // Customer destination
-                  { top: isDriving ? '30%' : '50%', left: isDriving ? '30%' : '50%' }, // Technician current location
-                ]}
-              />
-              <div className="absolute top-3 left-3 z-10">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-md">
-                  <Navigation className="size-3.5 animate-pulse" />
-                  Navigation Active
-                </span>
-              </div>
+          </>
+        )}
+
+        {/* Job History tab */}
+        {activeTab === 'history' && (
+          <div className="flex flex-col gap-4">
+            <h2 className="text-base font-bold text-foreground">Completed Job Logs</h2>
+            
+            {/* Summary details */}
+            <div className="grid grid-cols-2 gap-3">
+              <Card className="border border-border p-4 flex flex-col gap-1">
+                <span className="text-[10px] text-muted-foreground font-semibold">Total This Week</span>
+                <span className="text-lg font-bold text-foreground">Rs. {earningsSummary.week}</span>
+              </Card>
+              <Card className="border border-border p-4 flex flex-col gap-1">
+                <span className="text-[10px] text-muted-foreground font-semibold">Total This Month</span>
+                <span className="text-lg font-bold text-foreground">Rs. {earningsSummary.month}</span>
+              </Card>
             </div>
 
-            {/* Stage Info Headers */}
-            <div className="flex flex-col gap-1 px-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                  Active Dispatch Status
-                </span>
-                <span className="inline-flex items-center gap-1 rounded bg-[#EAF1FE] px-2 py-0.5 text-[10px] font-bold text-primary uppercase">
-                  {activeJob?.status}
-                </span>
-              </div>
-              <h2 className="text-lg font-bold text-foreground mt-1">
-                {activeJob?.status === 'matched' && "Preparing dispatch route"}
-                {activeJob?.status === 'en_route' && "Driving to customer's address"}
-                {activeJob?.status === 'arrived' && "You have arrived"}
-                {activeJob?.status === 'in_progress' && "Job is in progress"}
-              </h2>
-            </div>
-
-            {/* Customer Contact Detail Card */}
-            <Card className="soft-shadow border-border bg-muted/20">
-              <CardContent className="p-4 flex flex-col gap-3 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Customer ID</span>
-                  <span className="font-semibold text-foreground">CUST-1 (F-7, Islamabad)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Exact Address</span>
-                  <span className="font-bold text-foreground">House 42, Street 18, F-7/2, Islamabad</span>
-                </div>
-                <div className="flex justify-between border-t border-border/60 pt-2.5">
-                  <span className="text-muted-foreground">Collectable Fee (Cash)</span>
-                  <span className="font-bold text-foreground text-sm">
-                    {activeJob?.status === 'in_progress' ? formatPKR(activeTech.inspectionFee + 500) : formatPKR(activeTech.inspectionFee)}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Stage Action Triggers */}
+            {/* List */}
             <div className="flex flex-col gap-2 mt-2">
-              {activeJob?.status === 'en_route' && (
-                <Button
-                  size="lg"
-                  className="tap h-12 w-full bg-success hover:bg-success/95 text-white"
-                  onClick={() => handleStatusChange('arrived')}
-                >
-                  I Have Arrived
-                </Button>
+              {historyJobs.length > 0 ? (
+                historyJobs.map((job) => (
+                  <Card key={job.id} className="border border-border shadow-xs">
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs font-bold text-foreground capitalize">{job.category} Service</span>
+                        <span className="text-[10px] text-muted-foreground">{job.date} • Code {job.id.substring(0, 5).toUpperCase()}</span>
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Rs. {job.price}</span>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <div className="py-12 text-center text-xs text-muted-foreground">
+                  No completed jobs logged yet.
+                </div>
               )}
-
-              {activeJob?.status === 'arrived' && (
-                <Button
-                  size="lg"
-                  className="tap h-12 w-full bg-primary hover:bg-primary/95 text-white"
-                  onClick={() => handleStatusChange('in_progress')}
-                >
-                  Start Job
-                </Button>
-              )}
-
-              {activeJob?.status === 'in_progress' && (
-                <Button
-                  size="lg"
-                  className="tap h-12 w-full bg-success hover:bg-success/95 text-white"
-                  onClick={() => handleStatusChange('completed')}
-                >
-                  Complete Job & Collect Cash
-                </Button>
-              )}
-
-              {/* Emergency Contact Buttons */}
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                <Button variant="outline" className="tap justify-center bg-transparent h-11" render={<a href={`tel:+923001234567`} />}>
-                  <Phone className="size-4 mr-2" />
-                  Call Customer
-                </Button>
-                <Button variant="outline" className="tap justify-center bg-transparent h-11" render={<a href={`sms:+923001234567`} />}>
-                  <MessageSquare className="size-4 mr-2" />
-                  Chat Customer
-                </Button>
-              </div>
             </div>
           </div>
         )}
+
+        {/* Profile & Settings Tab */}
+        {activeTab === 'profile' && (
+          <form onSubmit={saveSettings} className="flex flex-col gap-4">
+            <h2 className="text-base font-bold text-foreground">Partner Settings</h2>
+
+            {/* Specialty fields */}
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="specialty" className="text-xs font-semibold text-foreground">Specialty Title</label>
+              <input
+                id="specialty"
+                type="text"
+                value={specialty}
+                onChange={(e) => setSpecialty(e.target.value)}
+                placeholder="e.g. Master Plumber"
+                className="h-11 w-full rounded-xl border border-border bg-muted px-3 text-xs outline-none focus:border-primary focus:bg-background text-foreground"
+              />
+            </div>
+
+            {/* Experience fields */}
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="experience" className="text-xs font-semibold text-foreground">Years of Experience</label>
+              <input
+                id="experience"
+                type="number"
+                value={experience}
+                onChange={(e) => setExperience(Number(e.target.value))}
+                min={1}
+                className="h-11 w-full rounded-xl border border-border bg-muted px-3 text-xs outline-none focus:border-primary focus:bg-background text-foreground"
+              />
+            </div>
+
+            {/* Bio fields */}
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="bio" className="text-xs font-semibold text-foreground">Bio Description</label>
+              <textarea
+                id="bio"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                rows={3}
+                placeholder="Write a brief intro..."
+                className="w-full rounded-xl border border-border bg-muted p-3 text-xs outline-none focus:border-primary focus:bg-background text-foreground resize-none"
+              />
+            </div>
+
+            {/* Categories checklist */}
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-semibold text-foreground">Services Offered</span>
+              <div className="grid grid-cols-2 gap-2">
+                {['plumbing', 'electrical', 'carpenter', 'ac-repair', 'appliance-repair'].map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => toggleCategory(cat)}
+                    className={cn(
+                      "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-colors justify-start",
+                      categories.includes(cat) ? "border-primary bg-primary/5 text-primary" : "border-border text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <span className={cn("size-2 rounded-full", categories.includes(cat) ? "bg-primary" : "bg-muted-foreground/40")} />
+                    <span className="capitalize">{cat.replace('-', ' ')}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Service radius slider */}
+            <div className="flex flex-col gap-2 mt-1">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-foreground">Service Dispatch Radius</span>
+                <span className="text-primary font-mono">{radius} km</span>
+              </div>
+              <input
+                type="range"
+                min={2}
+                max={40}
+                value={radius}
+                onChange={(e) => setRadius(Number(e.target.value))}
+                className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              size="lg"
+              disabled={savingSettings}
+              className="tap h-12 w-full mt-4"
+            >
+              {savingSettings ? 'Saving...' : 'Save Settings'}
+            </Button>
+          </form>
+        )}
       </main>
 
-      {/* Incoming Job Invite Modal (Full-Screen overlay) */}
-      {incomingRequest && (
+      {/* Incoming job offers countdown overlay */}
+      {incomingOffer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <Card className="w-full max-w-md bg-card border border-border rounded-2xl overflow-hidden soft-shadow animate-in fade-in zoom-in duration-200">
             <CardHeader className="bg-primary/5 border-b border-border/40 p-4">
               <CardTitle className="text-base flex items-center gap-2 text-primary font-bold">
-                <Zap className="size-5 fill-primary" />
-                Incoming Dispatch Request!
+                <Wrench className="size-5" />
+                Incoming Job Dispatch!
               </CardTitle>
             </CardHeader>
             <CardContent className="p-5 flex flex-col items-center gap-4 text-center">
-              {/* Circular Countdown Ring */}
+              {/* Ring countdown */}
               <div className="relative flex size-20 items-center justify-center">
                 <svg className="absolute inset-0 size-full -rotate-90">
-                  <circle
-                    cx="40"
-                    cy="40"
-                    r="34"
-                    className="stroke-muted fill-none"
-                    strokeWidth="4"
-                  />
+                  <circle cx="40" cy="40" r="34" className="stroke-muted fill-none" strokeWidth="4" />
                   <circle
                     cx="40"
                     cy="40"
@@ -531,35 +783,36 @@ export default function TechnicianDashboardPage() {
                 <span className="text-xl font-bold font-mono text-foreground">{countdown}s</span>
               </div>
 
-              {/* Request Details */}
+              {/* Offer Info */}
               <div className="flex flex-col gap-1">
                 <h3 className="text-base font-bold text-foreground capitalize">
-                  {incomingRequest.service_category} Request
+                  {incomingOffer.bookings?.service_category} Request
                 </h3>
                 <p className="text-xs text-muted-foreground flex items-center gap-1 justify-center mt-1">
                   <MapPin className="size-3.5 text-primary" />
-                  Distance: 1.2 km away • Area: F-7, Islamabad
+                  Location: {incomingOffer.bookings?.address || incomingOffer.bookings?.location || 'F-7, Islamabad'}
                 </p>
                 <p className="text-xs text-primary font-bold mt-1.5 uppercase tracking-wider">
-                  Guaranteed fee: {formatPKR(activeTech.inspectionFee)}
+                  Guaranteed Fee: Rs. {incomingOffer.bookings?.price || 0}
                 </p>
               </div>
 
               <div className="border-t border-border/40 w-full my-1" />
 
+              {/* Actions */}
               <div className="grid grid-cols-2 gap-2 w-full mt-1.5">
                 <Button
                   variant="outline"
                   size="lg"
                   className="tap h-12 w-full bg-transparent font-semibold border-border hover:bg-muted text-foreground"
-                  onClick={handleDeclineInvite}
+                  onClick={handleDeclineOffer}
                 >
                   Decline
                 </Button>
                 <Button
                   size="lg"
                   className="tap h-12 w-full bg-primary font-bold text-white shadow-lg hover:bg-primary/95"
-                  onClick={handleAcceptInvite}
+                  onClick={handleAcceptOffer}
                 >
                   Accept Job
                 </Button>
@@ -568,6 +821,40 @@ export default function TechnicianDashboardPage() {
           </Card>
         </div>
       )}
+
+      {/* Bottom Nav Bar */}
+      <div className="fixed bottom-0 inset-x-0 h-16 bg-card border-t border-border flex items-center justify-around z-40 soft-shadow">
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className={cn(
+            "flex flex-col items-center gap-1 text-[10px] font-semibold transition-colors",
+            activeTab === 'dashboard' ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Wrench className="size-5" />
+          Dashboard
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={cn(
+            "flex flex-col items-center gap-1 text-[10px] font-semibold transition-colors",
+            activeTab === 'history' ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Clock className="size-5" />
+          Job Logs
+        </button>
+        <button
+          onClick={() => setActiveTab('profile')}
+          className={cn(
+            "flex flex-col items-center gap-1 text-[10px] font-semibold transition-colors",
+            activeTab === 'profile' ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <User className="size-5" />
+          Profile
+        </button>
+      </div>
     </div>
   )
 }
