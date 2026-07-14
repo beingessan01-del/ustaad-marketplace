@@ -74,7 +74,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
             id: data.user.id,
             email: email,
             full_name: fullName,
-            role: accountType,
+            role: accountType === 'technician' ? 'provider' : accountType,
           })
         }
 
@@ -105,7 +105,8 @@ export function AuthForm({ mode }: { mode: Mode }) {
             .eq('id', data.user.id)
             .single()
 
-          const role = profile?.role || 'customer'
+          const dbRole = profile?.role || 'customer'
+          const role = dbRole === 'provider' ? 'technician' : dbRole
           localStorage.setItem('ustad_account_type', role)
           localStorage.setItem('ustad_email', email)
 

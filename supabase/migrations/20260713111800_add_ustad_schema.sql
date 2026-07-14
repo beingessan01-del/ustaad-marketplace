@@ -179,13 +179,21 @@ create policy "Allow users to manage their own notification preferences" on publ
 -- 4. Auth trigger
 create or replace function public.handle_new_user()
 returns trigger as $$
+declare
+  user_role public.user_role;
 begin
+  if coalesce(coalesce(new.raw_user_meta_data, '{}'::jsonb)->>'account_type', '') = 'technician' then
+    user_role := 'provider';
+  else
+    user_role := 'customer';
+  end if;
+
   insert into public.profiles (id, email, full_name, role, avatar_url)
   values (
     new.id,
     coalesce(new.email, ''),
     coalesce(coalesce(new.raw_user_meta_data, '{}'::jsonb)->>'name', 'New User'),
-    coalesce(coalesce(new.raw_user_meta_data, '{}'::jsonb)->>'account_type', 'customer'),
+    user_role,
     coalesce(new.raw_user_meta_data, '{}'::jsonb)->>'avatar_url'
   );
   return new;
