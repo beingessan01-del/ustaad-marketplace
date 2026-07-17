@@ -203,7 +203,7 @@ function InstantBookingContent() {
           lng: initialLng,
           address: 'House 42, Street 18, F-7/2, Islamabad',
           status: 'pending',
-          search_radius_km: 1.5,
+          search_radius_km: 10.0,
           price_estimate: 1200,
         })
 

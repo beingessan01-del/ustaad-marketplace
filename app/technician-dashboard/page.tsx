@@ -190,7 +190,7 @@ export default function TechnicianDashboardPage() {
 
     if (mockGps) {
       // Mock location periodic updates
-      const mockInterval = setInterval(async () => {
+      const updateLocation = async () => {
         await supabase.from('technician_status').upsert({
           technician_id: userId,
           is_online: true,
@@ -199,7 +199,9 @@ export default function TechnicianDashboardPage() {
           last_ping_at: new Date().toISOString(),
           active_job_id: activeJobId || null,
         })
-      }, 4000)
+      }
+      updateLocation() // Run immediately on change
+      const mockInterval = setInterval(updateLocation, 4000)
 
       return () => {
         clearInterval(mockInterval)
