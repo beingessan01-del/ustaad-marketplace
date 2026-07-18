@@ -72,6 +72,13 @@ export default function TechnicianDashboardPage() {
   const [mockLat, setMockLat] = useState(33.7294)
   const [mockLng, setMockLng] = useState(73.0561)
 
+  const getInspectionFee = () => {
+    const rating = details?.avg_rating || 5.0
+    if (rating >= 4.5) return 300
+    if (rating >= 3.5) return 250
+    return 200
+  }
+
   // Fetch messages thread history
   useEffect(() => {
     if (!userId || activeTab !== 'messages') return
@@ -427,7 +434,8 @@ export default function TechnicianDashboardPage() {
       .from('bookings')
       .update({
         status: 'confirmed',
-        technician_id: userId
+        technician_id: userId,
+        price: getInspectionFee()
       })
       .eq('id', incomingOffer.job_request_id)
 
@@ -1035,7 +1043,7 @@ export default function TechnicianDashboardPage() {
                   Location: {incomingOffer.bookings?.address || incomingOffer.bookings?.location || 'F-7, Islamabad'}
                 </p>
                 <p className="text-xs text-primary font-bold mt-1.5 uppercase tracking-wider">
-                  Guaranteed Fee: Rs. {incomingOffer.bookings?.price || 0}
+                  Inspection Fee: Rs. {getInspectionFee()}
                 </p>
               </div>
 

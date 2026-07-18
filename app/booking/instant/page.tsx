@@ -79,6 +79,43 @@ function InstantBookingContent() {
   const [showSimSettings, setShowSimSettings] = useState(false)
 
   const matchedTech = matchedTechId ? getTechnician(matchedTechId) : null
+  const [dbMatchedTech, setDbMatchedTech] = useState<any>(null)
+  const [bookingPrice, setBookingPrice] = useState<number>(300)
+
+  // Fetch database matched technician details dynamically if missing from static data
+  useEffect(() => {
+    if (!matchedTechId || matchedTech) {
+      setDbMatchedTech(null)
+      return
+    }
+
+    const loadDbMatchedTech = async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabaseClient = createClient()
+        const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', matchedTechId).single()
+        if (profile) {
+          const { data: details } = await supabaseClient.from('technician_details').select('*').eq('profile_id', matchedTechId).single()
+          setDbMatchedTech({
+            id: profile.id,
+            name: profile.full_name || 'USTAD Specialist',
+            initials: (profile.full_name || 'T').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+            specialty: details?.specialty || 'Service Professional',
+            category: details?.service_categories?.[0] || 'plumbing',
+            rating: details?.avg_rating || 5.0,
+            reviewCount: 14,
+            inspectionFee: bookingPrice,
+            avatarTint: 'bg-primary/10 text-primary',
+          })
+        }
+      } catch (err) {
+        console.error('Failed to load dynamic matched technician details:', err)
+      }
+    }
+    loadDbMatchedTech()
+  }, [matchedTechId, matchedTech, bookingPrice])
+
+  const techInfo = matchedTech || dbMatchedTech
 
   // Elapsed timer
   useEffect(() => {
@@ -228,6 +265,9 @@ function InstantBookingContent() {
         (payload) => {
           const currentReq = payload.new as any
           if (currentReq) {
+            if (currentReq.price) {
+              setBookingPrice(Number(currentReq.price))
+            }
             let clientStatus: any = currentReq.status
             if (clientStatus === 'pending') {
               clientStatus = 'searching'
@@ -570,7 +610,7 @@ function InstantBookingContent() {
               <h2 className="text-lg font-bold text-foreground">
                 {status === 'matched' && "Preparing dispatch..."}
                 {status === 'en_route' && "Technician is coming to you"}
-                {status === 'arrived' && `${matchedTech?.name || 'Technician'} is at your address`}
+                {status === 'arrived' && `${techInfo?.name || 'Technician'} is at your address`}
                 {status === 'in_progress' && "Work is underway..."}
                 {status === 'completed' && "Work has been completed!"}
               </h2>
@@ -584,20 +624,20 @@ function InstantBookingContent() {
             </div>
 
             {/* Match Detail Cards */}
-            {matchedTech && (
+            {techInfo && (
               <div className="flex flex-col gap-3">
                 {/* Tech Info Card */}
                 <Card className="soft-shadow border-border">
                   <CardContent className="p-4 flex items-center gap-3">
-                    <div className={cn("flex size-12 shrink-0 items-center justify-center rounded-xl font-bold text-sm", matchedTech.avatarTint)}>
-                      {matchedTech.initials}
+                    <div className={cn("flex size-12 shrink-0 items-center justify-center rounded-xl font-bold text-sm", techInfo.avatarTint)}>
+                      {techInfo.initials}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 justify-between">
-                        <span className="font-semibold text-sm text-foreground truncate">{matchedTech.name}</span>
-                        <StarRating rating={matchedTech.rating} size="sm" />
+                        <span className="font-semibold text-sm text-foreground truncate">{techInfo.name}</span>
+                        <StarRating rating={techInfo.rating} size="sm" />
                       </div>
-                      <p className="text-xs text-muted-foreground">{matchedTech.specialty}</p>
+                      <p className="text-xs text-muted-foreground">{techInfo.specialty}</p>
                       <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">Vehicle: Honda CD70 (RIR-1249) • Toolset Box</p>
                     </div>
                   </CardContent>
@@ -617,7 +657,7 @@ function InstantBookingContent() {
                     <div className="flex justify-between border-t border-border/60 pt-2.5">
                       <span className="text-muted-foreground">Dispatch Fee (Cash)</span>
                       <span className="font-bold text-foreground text-sm">
-                        {status === 'completed' ? formatPKR(matchedTech.inspectionFee + 500) : formatPKR(matchedTech.inspectionFee)}
+                        {status === 'completed' ? formatPKR(bookingPrice + 500) : formatPKR(bookingPrice)}
                       </span>
                     </div>
                   </CardContent>
