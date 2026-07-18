@@ -18,7 +18,16 @@ export default async function TechnicianPage({
 
       if (profile) {
         const { data: details } = await supabase.from('technician_details').select('*').eq('profile_id', id).single()
-        
+        const ratingVal = details?.avg_rating ? Number(details.avg_rating) : 4.8
+        let calculatedFee = 300
+        if (ratingVal >= 4.5) {
+          calculatedFee = 300
+        } else if (ratingVal >= 3.5) {
+          calculatedFee = 250
+        } else {
+          calculatedFee = 200
+        }
+
         // Construct compatible Technician object structure
         technician = {
           id: profile.id,
@@ -26,11 +35,11 @@ export default async function TechnicianPage({
           initials: (profile.full_name || 'T').split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2),
           specialty: details?.specialty || 'Service Professional',
           category: details?.service_categories?.[0] || 'plumbing',
-          rating: 4.8,
+          rating: ratingVal,
           reviewCount: 14,
           distanceKm: 2.5,
           status: 'available',
-          inspectionFee: 1500,
+          inspectionFee: calculatedFee,
           area: 'F-7, Islamabad',
           experienceYears: details?.years_experience || 2,
           jobsCompleted: 18,
