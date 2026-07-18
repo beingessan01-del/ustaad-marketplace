@@ -206,6 +206,7 @@ function InstantBookingContent() {
           search_radius_km: 10.0,
           price_estimate_min: 1000,
           price_estimate_max: 1500,
+          price: 1200,
         })
 
         if (error) {
