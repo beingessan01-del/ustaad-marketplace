@@ -36,26 +36,9 @@ function MapPageContent() {
   const [panning, setPanning] = useState(false)
   const [selectedTech, setSelectedTech] = useState<Technician | null>(null)
   const [onlineTechs, setOnlineTechs] = useState<Technician[]>([])
+  const [onlineStatuses, setOnlineStatuses] = useState<TechnicianStatus[]>([])
 
-  // Coordinate projection mapping for the 6 technicians around Islamabad F-7 center
-  const techCoordinates: Record<string, { top: string; left: string }> = {
-    'usman-khan': { top: '32%', left: '38%' },      // Plumbing
-    'adnan-raza': { top: '55%', left: '60%' },      // Electrical
-    'faisal-mehmood': { top: '22%', left: '72%' },  // Mechanic
-    'zeeshan-ali': { top: '65%', left: '25%' },     // Painting
-    'kamran-shah': { top: '15%', left: '46%' },     // Cleaning
-    'naveed-akhtar': { top: '78%', left: '52%' },   // Carpentry
-  }
 
-  // category tints for map pins
-  const categoryColorClasses: Record<string, string> = {
-    plumbing: 'bg-[#2F6FED] text-white',
-    electrical: 'bg-[#E0A100] text-white',
-    mechanic: 'bg-[#5B5BD6] text-white',
-    painting: 'bg-[#9C27B0] text-white',
-    cleaning: 'bg-[#10B981] text-white',
-    carpentry: 'bg-[#F5A623] text-white',
-  }
 
   // Populate technician statuses, fetching from Supabase first
   useEffect(() => {
@@ -101,10 +84,12 @@ function MapPageContent() {
         const onlineIds = initialStatuses.filter(s => s.is_online).map(s => s.technician_id)
         const matched = activeTechnicians.filter((t) => onlineIds.includes(t.id) || t.status === 'available')
         setOnlineTechs(matched)
+        setOnlineStatuses(initialStatuses as any)
       } else {
         const onlineIds = statuses.filter((s) => s.is_online).map((s) => s.technician_id)
         const matched = activeTechnicians.filter((t) => onlineIds.includes(t.id) || t.status === 'available')
         setOnlineTechs(matched)
+        setOnlineStatuses(statuses)
       }
       setLoading(false)
     }
@@ -113,11 +98,251 @@ function MapPageContent() {
     return () => clearTimeout(timer)
   }, [])
 
-  // Filter technicians based on chip
   const filteredTechs = onlineTechs.filter((t) => {
     if (selectedCategory === 'all') return true
     return t.category === selectedCategory
   })
+
+  const techLocations: Record<string, { lat: number; lng: number }> = {
+    'usman-khan': { lat: 33.7315, lng: 73.0512 },
+    'adnan-raza': { lat: 33.7251, lng: 73.0615 },
+    'faisal-mehmood': { lat: 33.7362, lng: 73.0645 },
+    'zeeshan-ali': { lat: 33.7231, lng: 73.0485 },
+    'kamran-shah': { lat: 33.7345, lng: 73.0558 },
+    'naveed-akhtar': { lat: 33.7198, lng: 73.0578 },
+  }
+
+  const postTechnicians = () => {
+    const iframe = document.getElementById('map-iframe') as HTMLIFrameElement
+    if (iframe && iframe.contentWindow) {
+      const list = filteredTechs.map((t) => {
+        const status = onlineStatuses.find((s) => s.technician_id === t.id)
+        const lat = status?.current_lat || techLocations[t.id]?.lat || (33.7294 + (Math.random() - 0.5) * 0.015)
+        const lng = status?.current_lng || techLocations[t.id]?.lng || (73.0561 + (Math.random() - 0.5) * 0.015)
+        return {
+          id: t.id,
+          name: t.name,
+          initials: t.initials,
+          category: t.category,
+          lat,
+          lng,
+        }
+      })
+      iframe.contentWindow.postMessage(
+        {
+          type: 'UPDATE_TECHNICIANS',
+          technicians: list,
+        },
+        '*'
+      )
+    }
+  }
+
+  useEffect(() => {
+    postTechnicians()
+  }, [filteredTechs, onlineStatuses])
+
+  useEffect(() => {
+    const handleMapMessage = (e: MessageEvent) => {
+      const data = e.data
+      if (!data) return
+
+      if (data.type === 'SELECT_TECHNICIAN') {
+        const tech = onlineTechs.find((t) => t.id === data.technicianId)
+        if (tech) {
+          setSelectedTech(tech)
+        }
+      } else if (data.type === 'USER_LOCATION') {
+        localStorage.setItem('ustad_customer_lat', String(data.lat))
+        localStorage.setItem('ustad_customer_lng', String(data.lng))
+      }
+    }
+
+    window.addEventListener('message', handleMapMessage)
+    return () => window.removeEventListener('message', handleMapMessage)
+  }, [onlineTechs])
+
+  const mapHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      background: #f5f6f8;
+    }
+    .user-pulse-icon {
+      position: relative;
+    }
+    .user-pulse-icon::after {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background-color: #2F6FED;
+      border-radius: 50%;
+      border: 2.5px solid white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+      top: -7px;
+      left: -7px;
+    }
+    .user-pulse-icon::before {
+      content: '';
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      background-color: rgba(47, 111, 237, 0.4);
+      border-radius: 50%;
+      top: -11px;
+      left: -11px;
+      animation: pulse 1.8s infinite ease-in-out;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.6); opacity: 1; }
+      100% { transform: scale(1.8); opacity: 0; }
+    }
+    
+    .tech-marker {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      width: 32px;
+      height: 32px;
+    }
+    .tech-pin-circle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid white;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+      color: white;
+    }
+    .tech-label {
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #1A1D1F;
+      color: white;
+      font-size: 8px;
+      font-weight: 700;
+      padding: 1.5px 3.5px;
+      border-radius: 4px;
+      white-space: nowrap;
+      margin-top: 3px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    var defaultLat = 33.7294;
+    var defaultLng = 73.0561;
+    
+    var map = L.map('map', {
+      zoomControl: false,
+      attributionControl: false
+    }).setView([defaultLat, defaultLng], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(map);
+
+    var userMarker = null;
+
+    function updateUserLocation(lat, lng) {
+      if (userMarker) {
+        userMarker.setLatLng([lat, lng]);
+      } else {
+        var userIcon = L.divIcon({
+          className: 'user-pulse-icon',
+          iconSize: [0, 0]
+        });
+        userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map);
+      }
+      map.setView([lat, lng], 14);
+    }
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        function(position) {
+          var realLat = position.coords.latitude;
+          var realLng = position.coords.longitude;
+          updateUserLocation(realLat, realLng);
+          window.parent.postMessage({ type: 'USER_LOCATION', lat: realLat, lng: realLng }, '*');
+        },
+        function(error) {
+          console.warn('Geolocation failed, centering on default:', error);
+          updateUserLocation(defaultLat, defaultLng);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } else {
+      updateUserLocation(defaultLat, defaultLng);
+    }
+
+    var colorClasses = {
+      plumbing: '#2F6FED',
+      electrical: '#E0A100',
+      mechanic: '#5B5BD6',
+      painting: '#9C27B0',
+      cleaning: '#10B981',
+      carpentry: '#F5A623'
+    };
+
+    var mapPinSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
+
+    var techMarkersGroup = L.layerGroup().addTo(map);
+
+    window.addEventListener('message', function(event) {
+      var message = event.data;
+      if (message.type === 'UPDATE_TECHNICIANS') {
+        techMarkersGroup.clearLayers();
+        var techs = message.technicians;
+        
+        techs.forEach(function(tech) {
+          var lat = tech.lat;
+          var lng = tech.lng;
+          var category = tech.category;
+          var color = colorClasses[category] || '#2F6FED';
+          
+          var techIcon = L.divIcon({
+            className: '',
+            html: '<div class="tech-marker">' +
+                  '  <div class="tech-pin-circle" style="background-color: ' + color + ';">' + mapPinSvg + '</div>' +
+                  '  <span class="tech-label">' + tech.initials + '</span>' +
+                  '</div>',
+            iconSize: [32, 32],
+            iconAnchor: [16, 32]
+          });
+
+          var marker = L.marker([lat, lng], { icon: techIcon });
+          marker.on('click', function() {
+            window.parent.postMessage({ type: 'SELECT_TECHNICIAN', technicianId: tech.id }, '*');
+          });
+          marker.addTo(techMarkersGroup);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
+  `
+
+
 
   // Simulated Pan map trigger
   const handleSimulatePan = () => {
@@ -204,46 +429,14 @@ function MapPageContent() {
               </div>
             ) : null}
 
-            {/* Simulated Live Map Grid */}
+            {/* Live Leaflet Map Grid */}
             <div className="map-grid relative w-full h-full min-h-[480px] overflow-hidden rounded-2xl">
               <iframe
-                src="https://www.openstreetmap.org/export/embed.html?bbox=73.0381,33.7154,73.0741,33.7434&layer=mapnik"
-                className="absolute inset-0 w-full h-full border-0 opacity-80"
+                id="map-iframe"
+                srcDoc={mapHtml}
+                onLoad={postTechnicians}
+                className="absolute inset-0 w-full h-full border-0 opacity-90"
               />
-              {/* Pulsing Customer Pin (Map center F-7) */}
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-                <span className="relative flex size-4.5 items-center justify-center">
-                  <span className="absolute inline-flex size-5 rounded-full bg-primary/40 animate-ping" />
-                  <span className="relative inline-flex size-4.5 rounded-full border-2 border-background bg-primary soft-shadow" />
-                </span>
-              </div>
-
-              {/* Technician pins on Map */}
-              {filteredTechs.map((tech) => {
-                const coords = techCoordinates[tech.id] || { top: '40%', left: '40%' }
-                const isSelected = selectedTech?.id === tech.id
-                const markerBg = categoryColorClasses[tech.category] || 'bg-primary'
-
-                return (
-                  <button
-                    key={tech.id}
-                    onClick={() => setSelectedTech(tech)}
-                    className="absolute -translate-x-1/2 -translate-y-full tap z-20 group transition-transform active:scale-95"
-                    style={{ top: coords.top, left: coords.left }}
-                  >
-                    <span className={cn(
-                      "flex size-9 items-center justify-center rounded-full border border-border shadow-lg transition-all",
-                      isSelected ? "scale-110 ring-4 ring-primary/20 border-primary" : "",
-                      markerBg
-                    )}>
-                      <MapPin className="size-4.5" />
-                    </span>
-                    <span className="absolute top-full start-1/2 -translate-x-1/2 bg-foreground text-background text-[8px] font-bold px-1 py-0.5 rounded whitespace-nowrap shadow-sm mt-1">
-                      {tech.initials}
-                    </span>
-                  </button>
-                )
-              })}
 
               {/* Empty state alert overlay */}
               {!loading && !panning && filteredTechs.length === 0 && (
