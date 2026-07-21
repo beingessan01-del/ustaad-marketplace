@@ -713,6 +713,32 @@ export default function TechnicianDashboardPage() {
                     </Button>
                   )}
 
+                  {activeJob && (activeJob.status === 'matched' || activeJob.status === 'en_route' || activeJob.status === 'arrived') && (
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="tap h-12 w-full border-destructive text-destructive hover:bg-destructive/10 bg-transparent font-semibold mt-1"
+                      onClick={async () => {
+                        if (confirm("Are you sure you want to cancel this job request?")) {
+                          const { error } = await supabase
+                            .from('bookings')
+                            .update({ status: 'cancelled' })
+                            .eq('id', activeJobId)
+                          if (!error) {
+                            alert('Job request has been cancelled.')
+                            setActiveJobId(null)
+                            setActiveJob(null)
+                          } else {
+                            console.error('Failed to cancel job:', error)
+                            alert('Error cancelling job: ' + error.message)
+                          }
+                        }
+                      }}
+                    >
+                      Cancel Job Request
+                    </Button>
+                  )}
+
                   {/* External navigation links */}
                   {activeJob && (
                     <a

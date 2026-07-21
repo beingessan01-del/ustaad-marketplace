@@ -208,7 +208,7 @@ function MapPageContent() {
             <div className="map-grid relative w-full h-full min-h-[480px] overflow-hidden rounded-2xl">
               <iframe
                 src="https://www.openstreetmap.org/export/embed.html?bbox=73.0381,33.7154,73.0741,33.7434&layer=mapnik"
-                className="absolute inset-0 w-full h-full border-0 pointer-events-none opacity-80"
+                className="absolute inset-0 w-full h-full border-0 opacity-80"
               />
               {/* Pulsing Customer Pin (Map center F-7) */}
               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">

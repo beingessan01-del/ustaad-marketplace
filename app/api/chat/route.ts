@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 // System instructions for Ustad Chat Assistant
 const SYSTEM_PROMPT = `
 You are the USTAD AI Chat Assistant, a friendly and professional conversational partner for the USTAD home services marketplace in Pakistan (operating in Islamabad/Rawalpindi).

@@ -36,6 +36,7 @@ import {
   type JobRequest,
 } from '@/lib/storage-sync'
 import { serviceCategories, formatPKR } from '@/lib/data'
+import { createClient } from '@/lib/supabase/client'
 
 type Message = {
   id: string
@@ -233,24 +234,42 @@ export default function ChatPage() {
   }
 
   // Tapping Confirm & Request hands off to existing dispatch matching flow
-  const handleConfirmDraftBooking = (args: any) => {
-    const requestId = 'REQ-' + Math.floor(100000 + Math.random() * 900000)
-    const newRequest: JobRequest = {
-      id: requestId,
-      customer_id: 'CUST-1',
+  const handleConfirmDraftBooking = async (args: any) => {
+    // Generate valid UUID
+    const bookingId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      const r = (Math.random() * 16) | 0
+      const v = c === 'x' ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    })
+
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const customerId = user?.id || '00000000-0000-0000-0000-000000000000'
+
+    // Create real booking in Supabase bookings table
+    const { error } = await supabase.from('bookings').insert({
+      id: bookingId,
+      customer_id: customerId,
       service_category: args.category || 'plumbing',
       lat: 33.7294,
       lng: 73.0561,
       address: args.address || 'House 42, Street 18, F-7/2, Islamabad',
-      status: 'searching',
-      created_at: Date.now(),
-      matched_technician_id: null,
+      status: 'pending',
       search_radius_km: 1.5,
+      description: args.description || 'AI Drafted Booking',
+      price_estimate_min: args.minPrice || 1000,
+      price_estimate_max: args.maxPrice || 1500,
+      price: args.minPrice ? Math.floor((args.minPrice + args.maxPrice) / 2) : 1200
+    })
+
+    if (error) {
+      console.error('Failed to create booking from draft:', error)
+      alert('Error creating booking: ' + error.message)
+      return
     }
 
-    insertDbRow('job_requests', newRequest)
     // Go directly to live tracking matching page
-    router.push(`/booking/instant?category=${args.category || 'plumbing'}`)
+    router.push(`/booking/instant?category=${args.category || 'plumbing'}&bookingId=${bookingId}`)
   }
 
   const handleEditDraftBooking = (args: any) => {

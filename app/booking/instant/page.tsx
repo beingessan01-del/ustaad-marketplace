@@ -49,10 +49,12 @@ function InstantBookingContent() {
 
   const serviceCategory = serviceCategories.find((c) => c.id === category) || serviceCategories[0]
 
+  const bookingIdParam = searchParams ? searchParams.get('bookingId') : null
+
   // Unique request ID (Postgres bookings.id expects a valid UUID format)
   const requestIdRef = useRef<string>('')
   if (!requestIdRef.current && typeof window !== 'undefined') {
-    requestIdRef.current = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    requestIdRef.current = bookingIdParam || 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
       const r = (Math.random() * 16) | 0
       const v = c === 'x' ? r : (r & 0x3) | 0x8
       return v.toString(16)
@@ -228,6 +230,21 @@ function InstantBookingContent() {
           if (storedLng) {
             initialLng = Number(storedLng)
             setCustLng(initialLng)
+          }
+        }
+
+        if (bookingIdParam) {
+          // Check if this booking already exists in the database
+          const { data, error } = await supabaseClient.from('bookings').select('*').eq('id', requestId).single()
+          if (data && !error) {
+            if (data.price) setBookingPrice(Number(data.price))
+            if (data.lat) setCustLat(Number(data.lat))
+            if (data.lng) setCustLng(Number(data.lng))
+            let clientStatus: any = data.status
+            if (clientStatus === 'pending') clientStatus = 'searching'
+            else if (clientStatus === 'confirmed') clientStatus = 'matched'
+            setStatus(clientStatus)
+            return
           }
         }
 
@@ -546,6 +563,31 @@ function InstantBookingContent() {
               >
                 Schedule Quote Booking
               </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                className="tap h-12 w-full bg-transparent"
+                render={<Link href="/home" />}
+              >
+                Return to Dashboard
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Cancelled Screen */}
+        {status === 'cancelled' && (
+          <div className="flex-1 flex flex-col justify-center items-center text-center gap-6 py-10">
+            <div className="flex size-14 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <X className="size-7" />
+            </div>
+            <div className="flex flex-col gap-2 max-w-sm">
+              <h2 className="text-lg font-bold text-foreground">Request Cancelled</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                This dispatch request has been cancelled by the service provider or customer.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 w-full max-w-xs">
               <Button
                 variant="outline"
                 size="lg"

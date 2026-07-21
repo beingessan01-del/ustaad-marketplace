@@ -30,7 +30,7 @@ export function MapPlaceholder({
     >
       <iframe
         src="https://www.openstreetmap.org/export/embed.html?bbox=73.0381,33.7154,73.0741,33.7434&layer=mapnik"
-        className="absolute inset-0 w-full h-full border-0 pointer-events-none opacity-80"
+        className="absolute inset-0 w-full h-full border-0 opacity-80"
       />
 
       {/* center user location with pulsing dot */}
