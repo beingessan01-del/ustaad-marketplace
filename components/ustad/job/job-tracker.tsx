@@ -340,6 +340,16 @@ export function JobTracker({ job }: { job: Job }) {
                 value={formatPKR(job.quoteAmount)}
                 emphasize
               />
+              {typeof window !== 'undefined' && localStorage.getItem('ustad_booking_photo_' + job.technicianId) && (
+                <div className="flex flex-col gap-1.5 pt-2 border-t border-border/40">
+                  <span className="text-xs text-muted-foreground">Attached Photo</span>
+                  <img
+                    src={localStorage.getItem('ustad_booking_photo_' + job.technicianId)!}
+                    alt="Booking Attachment"
+                    className="w-full h-32 object-cover rounded-xl border border-border/50 mt-1"
+                  />
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
                 Cash on completion. No payment is taken through the app.
               </p>

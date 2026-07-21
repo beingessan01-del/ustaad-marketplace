@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
@@ -9,6 +9,7 @@ import {
   Info,
   ShieldCheck,
   Sparkles,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatPKR, serviceCategories, defaultSchedule, type Technician } from '@/lib/data'
@@ -25,6 +26,26 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
   const [category, setCategory] = useState(technician?.category || categoryParam || 'plumbing')
   const [description, setDescription] = useState('')
   const [photoAdded, setPhotoAdded] = useState(false)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const base64 = reader.result as string
+        setPhotoUrl(base64)
+        setPhotoAdded(true)
+        if (technician?.id) {
+          localStorage.setItem(`ustad_booking_photo_${technician.id}`, base64)
+        } else {
+          localStorage.setItem(`ustad_booking_photo_new`, base64)
+        }
+      }
+      reader.readAsDataURL(file)
+    }
+  }
   const [quoteApproved, setQuoteApproved] = useState(false)
   const [slot, setSlot] = useState<string | null>(null)
   const [selectedDayLabel, setSelectedDayLabel] = useState<string>('Today')
@@ -190,23 +211,42 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
               <label className="text-sm font-medium text-foreground">
                 Add a photo <span className="text-muted-foreground">(optional)</span>
               </label>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+              />
               <button
                 type="button"
-                onClick={() => setPhotoAdded((v) => !v)}
+                onClick={() => {
+                  if (photoUrl) {
+                    setPhotoUrl(null)
+                    setPhotoAdded(false)
+                    if (technician?.id) {
+                      localStorage.removeItem(`ustad_booking_photo_${technician.id}`)
+                    } else {
+                      localStorage.removeItem(`ustad_booking_photo_new`)
+                    }
+                  } else {
+                    fileInputRef.current?.click()
+                  }
+                }}
                 className={cn(
-                  'tap flex h-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed',
+                  'tap flex h-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed overflow-hidden relative',
                   photoAdded
                     ? 'border-primary bg-primary/5'
                     : 'border-border bg-muted/50 hover:bg-muted',
                 )}
               >
-                {photoAdded ? (
-                  <>
-                    <Check className="size-5 text-success" />
-                    <span className="text-sm font-medium text-foreground">
-                      Photo added
-                    </span>
-                  </>
+                {photoUrl ? (
+                  <div className="relative w-full h-full flex items-center justify-center p-1.5">
+                    <img src={photoUrl} alt="Preview" className="h-24 max-h-24 object-cover rounded-lg" />
+                    <div className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity rounded-lg">
+                      <span className="text-[10px] font-bold text-white bg-destructive/95 px-2.5 py-1 rounded-md">Remove Photo</span>
+                    </div>
+                  </div>
                 ) : (
                   <>
                     <ImagePlus className="size-5 text-muted-foreground" />
@@ -354,6 +394,12 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
                 }
               />
               <ReviewRow label="Location" value={technician?.area || "F-7, Islamabad"} />
+              {photoUrl && (
+                <div className="flex flex-col gap-1.5 border-t border-border/40 pt-2.5">
+                  <span className="text-[11px] text-muted-foreground">Photo Attachment</span>
+                  <img src={photoUrl} alt="Attached Preview" className="w-20 h-20 object-cover rounded-lg border border-border mt-0.5" />
+                </div>
+              )}
               <div className="border-t border-border pt-3">
                 <ReviewRow
                   label="Estimated range"

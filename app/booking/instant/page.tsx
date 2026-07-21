@@ -702,6 +702,16 @@ function InstantBookingContent() {
                         {status === 'completed' ? formatPKR(bookingPrice + 500) : formatPKR(bookingPrice)}
                       </span>
                     </div>
+                    {typeof window !== 'undefined' && localStorage.getItem('ustad_booking_photo_new') && (
+                      <div className="flex flex-col gap-1.5 pt-2.5 border-t border-border/60">
+                        <span className="text-muted-foreground">Attached Photo</span>
+                        <img
+                          src={localStorage.getItem('ustad_booking_photo_new')!}
+                          alt="Uploaded Attachment"
+                          className="w-full h-32 object-cover rounded-lg border border-border/50 mt-1"
+                        />
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
