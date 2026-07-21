@@ -344,8 +344,19 @@ function InstantBookingContent() {
     }
   }, [])
 
-  const handleCancelSearch = () => {
+  const handleCancelSearch = async () => {
     updateDbRow<JobRequest>('job_requests', 'id', requestId, { status: 'cancelled' })
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      await supabase
+        .from('bookings')
+        .update({ status: 'cancelled' })
+        .eq('id', requestId)
+    } catch (e) {
+      console.warn('Failed to update booking status to cancelled:', e)
+    }
+
     // Cancel any pending offers
     const offers = getDbTable<JobOffer>('job_offers')
     const updatedOffers = offers.map((o) =>
@@ -733,16 +744,17 @@ function InstantBookingContent() {
 
                 {/* Cancel dispatch option */}
                 {status !== 'completed' && (
-                  <button
+                  <Button
+                    variant="outline"
+                    className="tap w-full border-destructive text-destructive hover:bg-destructive/10 bg-transparent font-semibold mt-3.5 h-11 flex items-center justify-center gap-1.5"
                     onClick={() => {
-                      if (confirm("Are you sure you want to cancel? Cancelling after match may incur a Rs. 150 cancellation charge.")) {
+                      if (confirm("Are you sure you want to cancel this booking? Cancelling after a match may incur a Rs. 150 cancellation charge.")) {
                         handleCancelSearch()
                       }
                     }}
-                    className="text-xs text-center text-muted-foreground/60 hover:text-destructive underline mt-2 transition-colors"
                   >
-                    Cancel Dispatch Request (cutoff fee applies)
-                  </button>
+                    Cancel Booking / Dispatch
+                  </Button>
                 )}
               </div>
             )}
