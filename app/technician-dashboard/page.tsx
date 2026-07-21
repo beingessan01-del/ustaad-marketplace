@@ -17,7 +17,8 @@ import {
   Star,
   MapPin,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  ArrowLeft
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AppTopbar } from '@/components/ustad/app-topbar'
@@ -614,6 +615,21 @@ export default function TechnicianDashboardPage() {
             ) : (
               /* Active Job Dispatch Panel */
               <div className="flex flex-col gap-4 flex-1">
+                {/* Header Back Bar */}
+                <div className="flex items-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="tap h-9 px-3 text-muted-foreground hover:text-foreground bg-transparent flex items-center gap-1.5"
+                    onClick={() => {
+                      setActiveJobId(null)
+                      setActiveJob(null)
+                    }}
+                  >
+                    <ArrowLeft className="size-4" />
+                    <span>Back to Dashboard</span>
+                  </Button>
+                </div>
                 {/* Route navigation Map */}
                 <div className="relative h-60 w-full rounded-2xl overflow-hidden border border-border">
                   <MapPlaceholder
