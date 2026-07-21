@@ -138,6 +138,13 @@ function MapPageContent() {
     }
   }
 
+  const handleLocateMe = () => {
+    const iframe = document.getElementById('map-iframe') as HTMLIFrameElement
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage({ type: 'LOCATE_ME' }, '*')
+    }
+  }
+
   useEffect(() => {
     postTechnicians()
   }, [filteredTechs, onlineStatuses])
@@ -335,6 +342,24 @@ function MapPageContent() {
           });
           marker.addTo(techMarkersGroup);
         });
+      } else if (message.type === 'LOCATE_ME') {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            function(position) {
+              var realLat = position.coords.latitude;
+              var realLng = position.coords.longitude;
+              updateUserLocation(realLat, realLng);
+              if (userMarker) {
+                userMarker.bindPopup("<b>You are here!</b>").openPopup();
+              }
+              map.setView([realLat, realLng], 15);
+            },
+            function(error) {
+              console.warn('Geolocation failed:', error);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        }
       }
     });
   </script>
@@ -437,6 +462,15 @@ function MapPageContent() {
                 onLoad={postTechnicians}
                 className="absolute inset-0 w-full h-full border-0 opacity-90"
               />
+
+              {/* Floating Locate Me Action Button */}
+              <button
+                onClick={handleLocateMe}
+                className="absolute bottom-24 right-4 z-20 tap flex size-11 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-lg hover:bg-muted active:scale-95 transition-all"
+                title="Locate Me"
+              >
+                <Navigation className="size-5 fill-primary text-primary" />
+              </button>
 
               {/* Empty state alert overlay */}
               {!loading && !panning && filteredTechs.length === 0 && (
