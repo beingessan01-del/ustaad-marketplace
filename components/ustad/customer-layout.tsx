@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { Home, Map, Clock, User, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/i18n'
+import { Logo } from './logo'
 
 export function CustomerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -28,6 +29,11 @@ export function CustomerLayout({ children }: { children: React.ReactNode }) {
       icon: Clock,
     },
     {
+      label: t('nav.chat'),
+      href: '/chat',
+      icon: MessageSquare,
+    },
+    {
       label: t('nav.profile'),
       href: '/profile',
       icon: User,
@@ -41,13 +47,8 @@ export function CustomerLayout({ children }: { children: React.ReactNode }) {
         "hidden md:flex flex-col w-64 border-border bg-card fixed h-full top-0 p-6 z-40 direction-transition",
         isRtl ? "right-0 border-l" : "left-0 border-r"
       )}>
-        <div className="flex items-center gap-2.5 mb-8">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold tracking-tight text-lg animate-pulse">
-            U
-          </span>
-          <span className="text-lg font-bold tracking-tight text-foreground">
-            USTAD
-          </span>
+        <div className="mb-8">
+          <Logo href="/home" size="md" />
         </div>
 
         <nav className="flex flex-col gap-1.5 flex-1">
