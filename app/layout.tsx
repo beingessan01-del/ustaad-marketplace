@@ -8,7 +8,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: 'USTAD — Trusted home services in Islamabad & Rawalpindi',
+  title: 'USTAAD — Trusted home services in Islamabad & Rawalpindi',
   description:
     'Book verified, background-checked home service technicians in Islamabad & Rawalpindi. Upfront pricing, quote approval before work, and pay only after the job is done.',
   generator: 'v0.app',

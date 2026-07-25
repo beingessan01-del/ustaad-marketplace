@@ -5,7 +5,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-dvh flex-col items-center bg-background px-4 py-10">
       <div className="mb-10">
-        <Logo />
+        <Logo variant="vertical" size="xl" />
       </div>
       <div className="flex w-full flex-1 items-start justify-center">
         <AuthForm mode="login" />
