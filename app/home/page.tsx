@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Search, SlidersHorizontal, Zap, Wrench } from 'lucide-react'
+import { Search, SlidersHorizontal, Zap, Wrench, X, AlertCircle, Star, Check } from 'lucide-react'
 import { CustomerLayout } from '@/components/ustad/customer-layout'
 import { AppTopbar } from '@/components/ustad/app-topbar'
 import { ServiceCard } from '@/components/ustad/service-card'
@@ -20,13 +20,15 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 
-import { useEffect } from 'react'
-
 export default function HomePage() {
   const router = useRouter()
   const { t } = useTranslation()
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [techList, setTechList] = useState(technicians)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterCategory, setFilterCategory] = useState<string | null>(null)
+  const [minRating, setMinRating] = useState<number>(0)
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false)
 
   useEffect(() => {
     const role = localStorage.getItem('ustad_account_type')
@@ -66,6 +68,23 @@ export default function HomePage() {
     fetchTechnicians()
   }, [])
 
+  const filteredTechs = techList.filter((tech) => {
+    const matchesCategory = filterCategory ? tech.category === filterCategory : true
+    const matchesRating = minRating ? tech.rating >= minRating : true
+    
+    if (!searchQuery.trim()) return matchesCategory && matchesRating
+
+    const q = searchQuery.toLowerCase().trim()
+    const matchesSearch = (
+      tech.name.toLowerCase().includes(q) ||
+      tech.specialty.toLowerCase().includes(q) ||
+      tech.category.toLowerCase().includes(q) ||
+      tech.area.toLowerCase().includes(q) ||
+      (tech.about && tech.about.toLowerCase().includes(q))
+    )
+    return matchesCategory && matchesRating && matchesSearch
+  })
+
   return (
     <CustomerLayout>
       <div className="pb-10">
@@ -79,17 +98,74 @@ export default function HomePage() {
               <input
                 type="text"
                 placeholder={t('home.search_placeholder')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-11 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="tap text-muted-foreground hover:text-foreground p-1 shrink-0"
+                  aria-label="Clear search"
+                >
+                  <X className="size-4" />
+                </button>
+              )}
             </div>
             <Button
               size="icon-lg"
-              className="tap size-11 shrink-0"
+              className={`tap size-11 shrink-0 ${
+                filterCategory || minRating > 0 ? 'bg-primary text-primary-foreground' : ''
+              }`}
+              onClick={() => setFilterDialogOpen(true)}
               aria-label="Filters"
             >
               <SlidersHorizontal />
             </Button>
           </div>
+
+          {/* Active Filters Bar */}
+          {(searchQuery || filterCategory || minRating > 0) && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5 animate-in fade-in duration-200">
+              <span className="text-xs text-muted-foreground">Active filters:</span>
+              {searchQuery && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                  "{searchQuery}"
+                  <button type="button" onClick={() => setSearchQuery('')} className="hover:text-primary/70">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {filterCategory && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                  Category: {serviceCategories.find(c => c.id === filterCategory)?.label}
+                  <button type="button" onClick={() => setFilterCategory(null)} className="hover:text-primary/70">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {minRating > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                  {minRating}+ Stars
+                  <button type="button" onClick={() => setMinRating(0)} className="hover:text-primary/70">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('')
+                  setFilterCategory(null)
+                  setMinRating(0)
+                }}
+                className="text-xs font-medium text-muted-foreground hover:text-foreground underline ml-1"
+              >
+                Reset all
+              </button>
+            </div>
+          )}
 
           {/* services */}
           <section className="mt-7">
@@ -129,19 +205,142 @@ export default function HomePage() {
           <section className="mt-6">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold text-foreground">
-                <TranslatedText k="home.technicians_near_you" variables={{ count: String(techList.length) }} />
+                <TranslatedText k="home.technicians_near_you" variables={{ count: String(filteredTechs.length) }} />
               </h2>
-              <button className="text-sm font-medium text-primary hover:underline">
-                <TranslatedText k="home.sort_button" />
-              </button>
+              {filteredTechs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterCategory(null)
+                    setMinRating(0)
+                    setSearchQuery('')
+                  }}
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  <TranslatedText k="home.sort_button" />
+                </button>
+              )}
             </div>
-            <div className="flex flex-col gap-3">
-              {techList.map((technician) => (
-                <TechnicianCard key={technician.id} technician={technician} />
-              ))}
-            </div>
+            {filteredTechs.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                {filteredTechs.map((technician) => (
+                  <TechnicianCard key={technician.id} technician={technician} />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10 text-center bg-card border border-border rounded-2xl p-6 my-2 shadow-xs">
+                <AlertCircle className="size-10 text-muted-foreground/60 mb-2" />
+                <h3 className="text-sm font-semibold text-foreground">No technicians found</h3>
+                <p className="text-xs text-muted-foreground max-w-xs mt-1">
+                  No technicians match your search query or active filters. Try searching for another name, service, or location.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-4 tap"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setFilterCategory(null)
+                    setMinRating(0)
+                  }}
+                >
+                  Clear Search & Filters
+                </Button>
+              </div>
+            )}
           </section>
         </main>
+
+        {/* Filter Modal Dialog */}
+        <Dialog open={filterDialogOpen} onOpenChange={setFilterDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <SlidersHorizontal className="size-5 text-primary" />
+                Filter Technicians
+              </DialogTitle>
+              <DialogDescription>
+                Filter by service category or minimum rating.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-col gap-4 py-2">
+              {/* Filter by Category */}
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Category</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFilterCategory(null)}
+                    className={`tap rounded-xl border p-2.5 text-xs font-medium text-left transition-colors ${
+                      filterCategory === null
+                        ? 'border-primary bg-primary/10 text-primary font-semibold'
+                        : 'border-border bg-muted/40 text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    All Categories
+                  </button>
+                  {serviceCategories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setFilterCategory(cat.id)}
+                      className={`tap rounded-xl border p-2.5 text-xs font-medium text-left transition-colors ${
+                        filterCategory === cat.id
+                          ? 'border-primary bg-primary/10 text-primary font-semibold'
+                          : 'border-border bg-muted/40 text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filter by Rating */}
+              <div className="flex flex-col gap-2 border-t border-border pt-3">
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Minimum Rating</label>
+                <div className="flex items-center gap-2">
+                  {[0, 4.5, 4.8].map((rating) => (
+                    <button
+                      key={rating}
+                      type="button"
+                      onClick={() => setMinRating(rating)}
+                      className={`tap flex-1 rounded-xl border p-2.5 text-xs font-medium text-center transition-colors ${
+                        minRating === rating
+                          ? 'border-primary bg-primary/10 text-primary font-semibold'
+                          : 'border-border bg-muted/40 text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {rating === 0 ? 'Any Rating' : `${rating}+ Stars`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-border pt-3 mt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setFilterCategory(null)
+                    setMinRating(0)
+                  }}
+                >
+                  Reset
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setFilterDialogOpen(false)}
+                >
+                  Apply Filters
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Booking Method Selection Dialog */}
         <Dialog open={selectedCategory !== null} onOpenChange={(open) => { if (!open) setSelectedCategory(null) }}>
