@@ -18,7 +18,14 @@ import {
   MapPin,
   ExternalLink,
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  Wallet,
+  PlusCircle,
+  ArrowDownLeft,
+  ArrowUpRight,
+  AlertTriangle,
+  CreditCard,
+  History
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AppTopbar } from '@/components/ustad/app-topbar'
@@ -26,6 +33,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
 import { MapPlaceholder } from '@/components/ustad/map-placeholder'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 
 type Tab = 'dashboard' | 'history' | 'profile' | 'messages'
 
@@ -37,6 +51,15 @@ export default function TechnicianDashboardPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [profile, setProfile] = useState<any>(null)
   const [details, setDetails] = useState<any>(null)
+
+  // Digital Wallet & Commission States
+  const [walletBalance, setWalletBalance] = useState(500)
+  const [walletTransactions, setWalletTransactions] = useState<any[]>([])
+  const [showTopupModal, setShowTopupModal] = useState(false)
+  const [topupAmount, setTopupAmount] = useState(1000)
+  const [topupMethod, setTopupMethod] = useState<'JazzCash' | 'EasyPaisa' | 'Bank Transfer'>('JazzCash')
+  const [topupProof, setTopupProof] = useState('')
+  const [isTopupLoading, setIsTopupLoading] = useState(false)
   
   // Tab control
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
@@ -127,7 +150,7 @@ export default function TechnicianDashboardPage() {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       setProfile(prof)
 
-      // Load Technician Details
+      // Load Technician Details & Wallet Balance
       const { data: det } = await supabase.from('technician_details').select('*').eq('profile_id', user.id).single()
       if (det) {
         setDetails(det)
@@ -136,6 +159,29 @@ export default function TechnicianDashboardPage() {
         setExperience(det.years_experience || 1)
         setCategories(det.service_categories || [])
         setRadius(Number(det.service_radius_km) || 10)
+        if (det.wallet_balance !== undefined && det.wallet_balance !== null) {
+          setWalletBalance(Number(det.wallet_balance))
+        }
+      }
+
+      // Load wallet transactions & fallback check
+      try {
+        const { data: txs } = await supabase
+          .from('wallet_transactions')
+          .select('*')
+          .eq('technician_id', user.id)
+          .order('created_at', { ascending: false })
+
+        if (txs && txs.length > 0) {
+          setWalletTransactions(txs)
+        } else if (typeof window !== 'undefined') {
+          const storedBalance = localStorage.getItem(`ustad_wallet_balance_${user.id}`)
+          if (storedBalance !== null) setWalletBalance(Number(storedBalance))
+          const storedTxs = localStorage.getItem(`ustad_wallet_txs_${user.id}`)
+          if (storedTxs) setWalletTransactions(JSON.parse(storedTxs))
+        }
+      } catch (e) {
+        console.warn('Wallet data query error:', e)
       }
 
       // Load mock location config
@@ -356,6 +402,13 @@ export default function TechnicianDashboardPage() {
     }
 
     async function loadOffers() {
+      // LOCKOUT CHECK: Hide incoming job requests if wallet balance is low/negative (<= 0)
+      if (walletBalance <= 0) {
+        setOffers([])
+        setIncomingOffer(null)
+        return
+      }
+
       const { data } = await supabase
         .from('job_offers')
         .select('*, bookings:job_request_id(*)')
@@ -386,7 +439,7 @@ export default function TechnicianDashboardPage() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [userId, isOnline, activeJobId])
+  }, [userId, isOnline, activeJobId, walletBalance])
 
   // 6. Countdown modal timer
   useEffect(() => {
@@ -416,6 +469,13 @@ export default function TechnicianDashboardPage() {
 
   const handleAcceptOffer = async () => {
     if (!incomingOffer || !userId) return
+
+    // LOCKOUT CHECK: Verify wallet balance is sufficient
+    if (walletBalance <= 0) {
+      alert('Your wallet balance is low/negative. Please top up your wallet to accept new job requests.')
+      await handleDeclineOffer()
+      return
+    }
 
     // 1. Concurrency Check: Verify booking status is still 'pending' (client 'searching')
     const { data: booking } = await supabase
@@ -471,11 +531,97 @@ export default function TechnicianDashboardPage() {
       setActiveJob((prev: any) => prev ? { ...prev, status: newStatus } : null)
       
       if (newStatus === 'completed') {
-        alert('Job completed successfully! Cash collected.')
+        // Commission deduction calculation (10%)
+        const jobPrice = activeJob?.price || activeJob?.final_price || getInspectionFee()
+        const commissionRate = 0.10
+        const commissionAmount = Number((jobPrice * commissionRate).toFixed(2))
+        const newBalance = Number((walletBalance - commissionAmount).toFixed(2))
+
+        setWalletBalance(newBalance)
+
+        const deductionTx = {
+          id: 'tx_' + Math.random().toString(36).substring(2, 9),
+          technician_id: userId,
+          type: 'COMMISSION_DEDUCTION',
+          amount: commissionAmount,
+          reference_job_id: activeJobId,
+          created_at: new Date().toISOString()
+        }
+
+        setWalletTransactions((prev) => [deductionTx, ...prev])
+
+        if (userId) {
+          try {
+            await supabase.from('technician_details').update({ wallet_balance: newBalance }).eq('profile_id', userId)
+            await supabase.from('profiles').update({ wallet_balance: newBalance }).eq('id', userId)
+            await supabase.from('wallet_transactions').insert({
+              technician_id: userId,
+              type: 'COMMISSION_DEDUCTION',
+              amount: commissionAmount,
+              reference_job_id: activeJobId,
+              created_at: new Date().toISOString()
+            })
+          } catch (err) {
+            console.warn('DB wallet deduction sync error:', err)
+          }
+
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`ustad_wallet_balance_${userId}`, String(newBalance))
+            const updatedTxs = [deductionTx, ...walletTransactions]
+            localStorage.setItem(`ustad_wallet_txs_${userId}`, JSON.stringify(updatedTxs))
+          }
+        }
+
+        alert(`Job completed successfully! Cash collected: Rs. ${jobPrice}. 10% commission (Rs. ${commissionAmount}) deducted from your digital wallet.`)
         setActiveJobId(null)
         setActiveJob(null)
       }
     }
+  }
+
+  const handleTopupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!userId || topupAmount <= 0) return
+
+    setIsTopupLoading(true)
+    const newBalance = Number((walletBalance + topupAmount).toFixed(2))
+    setWalletBalance(newBalance)
+
+    const topupTx = {
+      id: 'tx_topup_' + Math.random().toString(36).substring(2, 9),
+      technician_id: userId,
+      type: 'TOPUP',
+      amount: topupAmount,
+      reference_job_id: topupProof ? `${topupMethod}: ${topupProof}` : `Top-up via ${topupMethod}`,
+      created_at: new Date().toISOString()
+    }
+
+    const updatedTxs = [topupTx, ...walletTransactions]
+    setWalletTransactions(updatedTxs)
+
+    try {
+      await supabase.from('technician_details').update({ wallet_balance: newBalance }).eq('profile_id', userId)
+      await supabase.from('profiles').update({ wallet_balance: newBalance }).eq('id', userId)
+      await supabase.from('wallet_transactions').insert({
+        technician_id: userId,
+        type: 'TOPUP',
+        amount: topupAmount,
+        reference_job_id: topupProof ? `${topupMethod}: ${topupProof}` : `Top-up via ${topupMethod}`,
+        created_at: new Date().toISOString()
+      })
+    } catch (err) {
+      console.warn('Top-up DB sync error:', err)
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`ustad_wallet_balance_${userId}`, String(newBalance))
+      localStorage.setItem(`ustad_wallet_txs_${userId}`, JSON.stringify(updatedTxs))
+    }
+
+    setIsTopupLoading(false)
+    setShowTopupModal(false)
+    setTopupProof('')
+    alert(`Wallet topped up successfully by Rs. ${topupAmount.toLocaleString()} via ${topupMethod}! New balance: Rs. ${newBalance.toLocaleString('en-PK', { minimumFractionDigits: 2 })}`)
   }
 
   const handleAutodetectLocation = () => {
@@ -560,6 +706,33 @@ export default function TechnicianDashboardPage() {
       <main className="mx-auto w-full max-w-xl px-4 py-5 flex flex-col gap-4">
         {activeTab === 'dashboard' && (
           <>
+            {/* Wallet Lockout Warning Banner */}
+            {walletBalance <= 0 && (
+              <Card className="border-2 border-amber-500/40 bg-amber-500/10 soft-shadow animate-in fade-in duration-200">
+                <CardContent className="p-4 flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="size-5 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                        Wallet Balance Low / Negative
+                      </h3>
+                      <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
+                        Your wallet balance is low/negative (Rs. {walletBalance.toFixed(2)}). Please top up your wallet to continue receiving new job leads.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="tap self-end font-bold bg-amber-600 hover:bg-amber-700 text-white text-xs h-8 px-3"
+                    onClick={() => setShowTopupModal(true)}
+                  >
+                    <PlusCircle className="size-3.5 mr-1" />
+                    Top Up Wallet Now
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Online/Offline Status Header */}
             {!activeJobId ? (
               <div className="flex flex-col gap-4 flex-1">
@@ -590,6 +763,41 @@ export default function TechnicianDashboardPage() {
                   </CardContent>
                 </Card>
 
+                {/* Digital Wallet Card */}
+                <Card className={cn(
+                  "soft-shadow border-2 transition-all",
+                  walletBalance <= 0 ? "border-amber-500/30 bg-amber-500/5" : "border-primary/20 bg-primary/5"
+                )}>
+                  <CardContent className="p-4 sm:p-5 flex items-center justify-between gap-3">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        <Wallet className="size-4 text-primary shrink-0" />
+                        <span className="truncate">Digital Wallet</span>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className={cn(
+                          "text-xl sm:text-2xl font-black tracking-tight truncate",
+                          walletBalance <= 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"
+                        )}>
+                          Rs. {walletBalance.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground leading-tight">
+                        10% commission automatically deducted on job completion
+                      </p>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      className="tap font-bold shrink-0 bg-primary text-primary-foreground shadow-md hover:bg-primary/90"
+                      onClick={() => setShowTopupModal(true)}
+                    >
+                      <PlusCircle className="size-4 mr-1.5" />
+                      Top Up
+                    </Button>
+                  </CardContent>
+                </Card>
+
                 {/* Quick stats */}
                 <div className="grid grid-cols-2 gap-3">
                   <Card className="soft-shadow border-border bg-card">
@@ -605,6 +813,58 @@ export default function TechnicianDashboardPage() {
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Wallet Transaction History Log */}
+                <Card className="soft-shadow border-border bg-card">
+                  <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                    <CardTitle className="text-xs font-bold text-foreground flex items-center gap-2">
+                      <History className="size-4 text-primary" />
+                      Wallet Activity Log
+                    </CardTitle>
+                    <span className="text-[10px] font-semibold text-muted-foreground">
+                      {walletTransactions.length} entries
+                    </span>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    {walletTransactions.length > 0 ? (
+                      <div className="flex flex-col divide-y divide-border/40 max-h-48 overflow-y-auto pr-1">
+                        {walletTransactions.slice(0, 5).map((tx: any, idx: number) => {
+                          const isTopup = tx.type === 'TOPUP'
+                          return (
+                            <div key={tx.id || idx} className="py-2 flex items-center justify-between gap-2 text-xs">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={cn(
+                                  "flex size-6 shrink-0 items-center justify-center rounded-full text-white font-bold text-[10px]",
+                                  isTopup ? "bg-emerald-500" : "bg-amber-500"
+                                )}>
+                                  {isTopup ? <ArrowDownLeft className="size-3.5" /> : <ArrowUpRight className="size-3.5" />}
+                                </span>
+                                <div className="flex flex-col min-w-0">
+                                  <span className="font-semibold text-foreground truncate">
+                                    {isTopup ? 'Wallet Top Up' : '10% Commission Deduction'}
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground truncate">
+                                    {tx.reference_job_id || (isTopup ? 'Manual Top Up' : 'Job Completion')}
+                                  </span>
+                                </div>
+                              </div>
+                              <span className={cn(
+                                "font-extrabold text-xs shrink-0",
+                                isTopup ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                              )}>
+                                {isTopup ? '+' : '-'} Rs. {Number(tx.amount).toLocaleString('en-PK', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="py-4 text-center text-xs text-muted-foreground">
+                        No transactions logged yet.
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
                 {isOnline ? (
                   <div className="flex-1 flex flex-col items-center justify-center py-12 text-center gap-4">
@@ -1143,6 +1403,116 @@ export default function TechnicianDashboardPage() {
           </Card>
         </div>
       )}
+
+      {/* Top Up Wallet Modal */}
+      <Dialog open={showTopupModal} onOpenChange={setShowTopupModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="size-5 text-primary" />
+              Top Up Digital Wallet
+            </DialogTitle>
+            <DialogDescription>
+              Add funds to your technician wallet via JazzCash, EasyPaisa, or Bank Transfer to keep receiving job requests.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleTopupSubmit} className="flex flex-col gap-4 py-2">
+            {/* Payment Method Selector */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Select Payment Method
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['JazzCash', 'EasyPaisa', 'Bank Transfer'] as const).map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => setTopupMethod(method)}
+                    className={cn(
+                      "tap rounded-xl border p-2.5 text-xs font-semibold text-center transition-all flex flex-col items-center gap-1",
+                      topupMethod === method
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <CreditCard className="size-4" />
+                    <span>{method}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Topup Amount Selection */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Top Up Amount (PKR)
+              </label>
+              <div className="grid grid-cols-4 gap-2 mb-1">
+                {[500, 1000, 2000, 5000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setTopupAmount(amt)}
+                    className={cn(
+                      "tap rounded-xl border py-2 text-xs font-bold text-center transition-colors",
+                      topupAmount === amt
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-muted/40 text-foreground hover:bg-muted"
+                    )}
+                  >
+                    Rs. {amt.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="number"
+                min="100"
+                step="100"
+                value={topupAmount}
+                onChange={(e) => setTopupAmount(Number(e.target.value))}
+                className="h-10 w-full rounded-xl border border-border bg-muted px-3 text-xs font-semibold text-foreground outline-none focus:border-primary focus:bg-background"
+                placeholder="Enter custom amount"
+                required
+              />
+            </div>
+
+            {/* Payment Reference Proof Input */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Transaction TID / Reference ID (Optional)
+              </label>
+              <input
+                type="text"
+                value={topupProof}
+                onChange={(e) => setTopupProof(e.target.value)}
+                className="h-10 w-full rounded-xl border border-border bg-muted px-3 text-xs text-foreground outline-none focus:border-primary focus:bg-background placeholder:text-muted-foreground"
+                placeholder="e.g. TID-9824012"
+              />
+            </div>
+
+            {/* Submit Buttons */}
+            <div className="flex items-center justify-end gap-2 border-t border-border pt-3 mt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowTopupModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="font-bold tap"
+                disabled={isTopupLoading}
+              >
+                {isTopupLoading ? 'Processing...' : `Confirm Rs. ${topupAmount.toLocaleString()} Top Up`}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Bottom Nav Bar */}
       <div className="fixed bottom-0 inset-x-0 h-16 bg-card border-t border-border flex items-center justify-around z-40 soft-shadow">
