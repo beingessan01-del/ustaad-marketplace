@@ -270,7 +270,7 @@ function HistoryPageContent() {
       // Append review
       const newRev: Review = {
         id: 'r_new_' + Math.random(),
-        name: 'Kamran Malik', // logged-in user name
+        name: typeof window !== 'undefined' ? (localStorage.getItem('ustad_name') || 'Customer') : 'Customer',
         rating,
         comment: comment || 'Professional service!',
         date: 'Just now',

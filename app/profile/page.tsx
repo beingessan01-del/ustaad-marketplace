@@ -46,16 +46,13 @@ function ProfilePageContent() {
   const [accountType, setAccountType] = useState<'customer' | 'technician'>('customer')
 
   // Editable Profile
-  const [name, setName] = useState('Kamran Malik')
-  const [email, setEmail] = useState('kamran.malik@outlook.com')
-  const [phone, setPhone] = useState('300 1234567')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [avatarTint, setAvatarTint] = useState('bg-[#EAF1FE] text-primary')
 
   // Saved Addresses
-  const [addresses, setAddresses] = useState<string[]>([
-    'House 42, Street 18, F-7/2, Islamabad',
-    'Office 301, Centaurus Mall, G-8, Islamabad',
-  ])
+  const [addresses, setAddresses] = useState<string[]>([])
   const [newAddress, setNewAddress] = useState('')
   const [showAddressInput, setShowAddressInput] = useState(false)
 
@@ -305,6 +302,33 @@ function ProfilePageContent() {
               <Skeleton className="h-40 w-full rounded-2xl" />
               <Skeleton className="h-48 w-full rounded-2xl" />
             </div>
+          ) : !name && !email ? (
+            <Card className="soft-shadow border-border p-6 text-center flex flex-col items-center gap-4 my-4">
+              <div className="size-16 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                <User className="size-8 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-foreground">Welcome to USTAAD</h2>
+                <p className="text-xs text-muted-foreground max-w-xs mt-1">
+                  Log in or create an account to view your profile, manage saved addresses, and track your service requests.
+                </p>
+              </div>
+              <div className="flex w-full flex-col gap-2.5 mt-2">
+                <Button
+                  className="w-full h-11 font-bold tap"
+                  onClick={() => router.push('/login')}
+                >
+                  Log In
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full h-11 font-semibold tap"
+                  onClick={() => router.push('/signup')}
+                >
+                  Create Account
+                </Button>
+              </div>
+            </Card>
           ) : (
             <>
               {/* Profile Header Card */}
