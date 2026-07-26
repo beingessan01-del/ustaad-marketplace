@@ -113,6 +113,49 @@ const TOOLS = [
   }
 ]
 
+// Static fallback database array matching the 39 rows in Supabase issue_price_list
+const STATIC_ISSUE_PRICE_LIST = [
+  { issue_name: "Leaking/small tap replacement", category: "plumbing", price_min: 200, price_max: 500, unit: "per job" },
+  { issue_name: "Tap/mixer repair or replacement", category: "plumbing", price_min: 500, price_max: 1000, unit: "per job" },
+  { issue_name: "Drain blockage (sink)", category: "plumbing", price_min: 500, price_max: 1000, unit: "per job" },
+  { issue_name: "Drain blockage (toilet/mainline)", category: "plumbing", price_min: 1000, price_max: 2500, unit: "per job" },
+  { issue_name: "Toilet seat installation/replacement", category: "plumbing", price_min: 800, price_max: 1500, unit: "per job" },
+  { issue_name: "Sink/basin installation", category: "plumbing", price_min: 600, price_max: 1200, unit: "per job" },
+  { issue_name: "Geyser installation (instant type)", category: "plumbing", price_min: 1200, price_max: 2000, unit: "per job" },
+  { issue_name: "Geyser installation (gas/classic type)", category: "plumbing", price_min: 2000, price_max: 3000, unit: "per job" },
+  { issue_name: "Pressure pump/motor installation", category: "plumbing", price_min: 2000, price_max: 3000, unit: "per job" },
+  { issue_name: "Water tank cleaning (plastic)", category: "plumbing", price_min: 1200, price_max: 2000, unit: "per job" },
+  { issue_name: "Water tank cleaning (cement)", category: "plumbing", price_min: 2000, price_max: 3500, unit: "per job" },
+  { issue_name: "Breaker replacement (1/2 phase)", category: "electrical", price_min: 400, price_max: 700, unit: "per job" },
+  { issue_name: "Breaker replacement (63amp)", category: "electrical", price_min: 600, price_max: 1000, unit: "per job" },
+  { issue_name: "Short circuit / fault diagnosis", category: "electrical", price_min: 800, price_max: 1500, unit: "per job" },
+  { issue_name: "Switch/socket/light point wiring repair", category: "electrical", price_min: 300, price_max: 600, unit: "per job" },
+  { issue_name: "Exhaust fan installation", category: "electrical", price_min: 800, price_max: 1500, unit: "per job" },
+  { issue_name: "UPS installation (single battery)", category: "electrical", price_min: 800, price_max: 1500, unit: "per job" },
+  { issue_name: "CCTV camera installation", category: "electrical", price_min: 800, price_max: 1500, unit: "per unit" },
+  { issue_name: "LED/LCD TV wall mounting", category: "electrical", price_min: 800, price_max: 1500, unit: "per job" },
+  { issue_name: "Generator installation w/ changeover", category: "electrical", price_min: 4000, price_max: 6000, unit: "per job" },
+  { issue_name: "AC not cooling (diagnosis + basic fix)", category: "mechanic", price_min: 1500, price_max: 3000, unit: "per job" },
+  { issue_name: "Split AC cleaning (normal)", category: "mechanic", price_min: 1500, price_max: 2500, unit: "per job" },
+  { issue_name: "AC gas refilling", category: "mechanic", price_min: 3000, price_max: 4000, unit: "per kg" },
+  { issue_name: "AC installation (split unit)", category: "mechanic", price_min: 2500, price_max: 4000, unit: "per job" },
+  { issue_name: "Washing machine repair", category: "mechanic", price_min: 1000, price_max: 2500, unit: "per job" },
+  { issue_name: "Microwave repair", category: "mechanic", price_min: 800, price_max: 2000, unit: "per job" },
+  { issue_name: "Wall repaint - distemper/whitewash", category: "painting", price_min: 30, price_max: 40, unit: "per sqft" },
+  { issue_name: "Wall repaint - plastic emulsion", category: "painting", price_min: 45, price_max: 55, unit: "per sqft" },
+  { issue_name: "Wall repaint - enamel", category: "painting", price_min: 55, price_max: 65, unit: "per sqft" },
+  { issue_name: "New paint (labor only)", category: "painting", price_min: 25, price_max: 35, unit: "per sqft" },
+  { issue_name: "Door lock (complete) change", category: "carpentry", price_min: 400, price_max: 700, unit: "per job" },
+  { issue_name: "Door hinges/handle change", category: "carpentry", price_min: 400, price_max: 700, unit: "per job" },
+  { issue_name: "Door installation (new)", category: "carpentry", price_min: 800, price_max: 1500, unit: "per job" },
+  { issue_name: "Drawer channel/lock change", category: "carpentry", price_min: 300, price_max: 600, unit: "per job" },
+  { issue_name: "Wall hanging/picture installation", category: "carpentry", price_min: 200, price_max: 400, unit: "per job" },
+  { issue_name: "Room cleaning", category: "cleaning", price_min: 4, price_max: 6, unit: "per sqft" },
+  { issue_name: "Kitchen cleaning", category: "cleaning", price_min: 6, price_max: 9, unit: "per sqft" },
+  { issue_name: "Bathroom cleaning", category: "cleaning", price_min: 8, price_max: 11, unit: "per sqft" },
+  { issue_name: "One-time cleaning minimum charge", category: "cleaning", price_min: 1500, price_max: 2500, unit: "per job" }
+]
+
 // Query Supabase issue_price_list and perform issue-level price estimate matching
 async function fetchIssuePriceEstimate(category: string, issueDescription: string) {
   const fallbackRates: Record<string, { min: number; max: number; unit?: string }> = {
@@ -123,6 +166,15 @@ async function fetchIssuePriceEstimate(category: string, issueDescription: strin
     cleaning: { min: 4, max: 2500, unit: 'per sqft' },
     carpentry: { min: 200, max: 1500, unit: 'per job' },
   }
+
+  let issueList: Array<{
+    id?: string
+    issue_name: string
+    category: string
+    price_min: number
+    price_max: number
+    unit: string
+  }> = STATIC_ISSUE_PRICE_LIST
 
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://pebbjenmssvavvvdiqlq.supabase.co'
@@ -137,95 +189,92 @@ async function fetchIssuePriceEstimate(category: string, issueDescription: strin
     })
 
     if (res.ok) {
-      const issueList: Array<{
-        id: string
-        issue_name: string
-        category: string
-        price_min: number
-        price_max: number
-        unit: string
-      }> = await res.json()
-
-      const textToMatch = (issueDescription || '').toLowerCase().trim()
-
-      if (textToMatch && issueList.length > 0) {
-        let bestMatch: typeof issueList[0] | null = null
-        let maxScore = 0
-
-        for (const item of issueList) {
-          let score = 0
-          const itemIssue = item.issue_name.toLowerCase()
-          const itemCat = item.category.toLowerCase()
-
-          if (category && itemCat === category.toLowerCase()) {
-            score += 1
-          }
-
-          const words = textToMatch.split(/\s+/)
-          for (const word of words) {
-            if (word.length < 3 && word !== 'ac' && word !== 'tv') continue
-            if (itemIssue.includes(word)) {
-              score += 3
-            }
-          }
-
-          // Specific Roman Urdu / Casual English rules
-          if ((textToMatch.includes('tap') || textToMatch.includes('nalki')) && itemIssue.includes('tap')) {
-            if (textToMatch.includes('leak') || textToMatch.includes('small') || textToMatch.includes('change')) {
-              if (itemIssue.includes('small tap')) score += 10
-            } else if (itemIssue.includes('mixer') || itemIssue.includes('repair')) {
-              score += 8
-            } else {
-              score += 6
-            }
-          }
-
-          if ((textToMatch.includes('ac') || textToMatch.includes('a/c')) && itemCat === 'mechanic') {
-            if (textToMatch.includes('thanda') || textToMatch.includes('cool') || textToMatch.includes('cooling') || textToMatch.includes('nahi')) {
-              if (itemIssue.includes('ac not cooling')) score += 12
-            } else if (textToMatch.includes('gas') || textToMatch.includes('filling')) {
-              if (itemIssue.includes('gas refilling')) score += 12
-            } else if (textToMatch.includes('clean') || textToMatch.includes('service')) {
-              if (itemIssue.includes('cleaning')) score += 12
-            } else if (textToMatch.includes('install')) {
-              if (itemIssue.includes('installation')) score += 12
-            } else {
-              if (itemIssue.includes('ac not cooling')) score += 5
-            }
-          }
-
-          if ((textToMatch.includes('drain') || textToMatch.includes('clog') || textToMatch.includes('band')) && itemIssue.includes('drain')) {
-            if (textToMatch.includes('sink') || textToMatch.includes('basin')) {
-              if (itemIssue.includes('sink')) score += 10
-            } else {
-              if (itemIssue.includes('toilet')) score += 8
-            }
-          }
-
-          if ((textToMatch.includes('breaker') || textToMatch.includes('fuse')) && itemIssue.includes('breaker')) {
-            score += 10
-          }
-
-          if (score > maxScore && score >= 4) {
-            maxScore = score
-            bestMatch = item
-          }
-        }
-
-        if (bestMatch) {
-          return {
-            category: bestMatch.category,
-            minPrice: bestMatch.price_min,
-            maxPrice: bestMatch.price_max,
-            unit: bestMatch.unit || 'per job',
-            issue_name: bestMatch.issue_name,
-            isSpecificMatch: true
-          }
-        }
+      const fetchedRows = await res.json()
+      if (Array.isArray(fetchedRows) && fetchedRows.length > 0) {
+        issueList = fetchedRows
       }
     }
   } catch (err) {
-    console.error('Error fetching issue_price_list:', err)
+    console.error('Error fetching live issue_price_list from Supabase, using embedded fallback list:', err)
+  }
+
+  const textToMatch = (issueDescription || '').toLowerCase().trim()
+
+  if (textToMatch && issueList.length > 0) {
+    let bestMatch: typeof issueList[0] | null = null
+    let maxScore = 0
+
+    for (const item of issueList) {
+      let score = 0
+      const itemIssue = item.issue_name.toLowerCase()
+      const itemCat = item.category.toLowerCase()
+
+      if (category && itemCat === category.toLowerCase()) {
+        score += 1
+      }
+
+      const words = textToMatch.split(/\s+/)
+      for (const word of words) {
+        const cleanWord = word.replace(/[^a-z0-9]/g, '')
+        if (cleanWord.length < 3 && cleanWord !== 'ac' && cleanWord !== 'tv') continue
+        if (itemIssue.includes(cleanWord)) {
+          score += 3
+        }
+      }
+
+      // Priority keyword matching rules for specific issues
+      if ((textToMatch.includes('tap') || textToMatch.includes('nalki') || textToMatch.includes('faucet')) && itemIssue.includes('tap')) {
+        if (textToMatch.includes('leak') || textToMatch.includes('small') || textToMatch.includes('fix') || textToMatch.includes('change') || textToMatch.includes('replace')) {
+          if (itemIssue.includes('leaking') || itemIssue.includes('small')) score += 20
+        } else if (itemIssue.includes('mixer') || itemIssue.includes('repair')) {
+          score += 15
+        } else {
+          score += 10
+        }
+      }
+
+      if ((textToMatch.includes('ac') || textToMatch.includes('a/c')) && itemCat === 'mechanic') {
+        if (textToMatch.includes('thanda') || textToMatch.includes('cool') || textToMatch.includes('cooling') || textToMatch.includes('nahi') || textToMatch.includes('fix')) {
+          if (itemIssue.includes('ac not cooling')) score += 20
+        } else if (textToMatch.includes('gas') || textToMatch.includes('filling')) {
+          if (itemIssue.includes('gas refilling')) score += 20
+        } else if (textToMatch.includes('clean') || textToMatch.includes('service')) {
+          if (itemIssue.includes('cleaning')) score += 20
+        } else if (textToMatch.includes('install')) {
+          if (itemIssue.includes('installation')) score += 20
+        } else {
+          if (itemIssue.includes('ac not cooling')) score += 10
+        }
+      }
+
+      if ((textToMatch.includes('drain') || textToMatch.includes('clog') || textToMatch.includes('block') || textToMatch.includes('band')) && itemIssue.includes('drain')) {
+        if (textToMatch.includes('sink') || textToMatch.includes('basin')) {
+          if (itemIssue.includes('sink')) score += 20
+        } else {
+          if (itemIssue.includes('toilet') || itemIssue.includes('mainline')) score += 15
+        }
+      }
+
+      if ((textToMatch.includes('breaker') || textToMatch.includes('fuse')) && itemIssue.includes('breaker')) {
+        score += 20
+      }
+
+      if (score > maxScore && score >= 2) {
+        maxScore = score
+        bestMatch = item
+      }
+    }
+
+    if (bestMatch) {
+      return {
+        category: bestMatch.category,
+        minPrice: bestMatch.price_min,
+        maxPrice: bestMatch.price_max,
+        unit: bestMatch.unit || 'per job',
+        issue_name: bestMatch.issue_name,
+        isSpecificMatch: true
+      }
+    }
   }
 
   const fallback = fallbackRates[category] || fallbackRates.plumbing
