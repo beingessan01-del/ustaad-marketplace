@@ -4,19 +4,15 @@ import { useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
-  Check,
   ImagePlus,
-  Info,
   ShieldCheck,
-  Sparkles,
-  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatPKR, serviceCategories, defaultSchedule, type Technician } from '@/lib/data'
 import { Button } from '@/components/ui/button'
 import { SchedulePicker } from '../schedule-picker'
 
-const steps = ['Describe', 'Estimate', 'Schedule', 'Review'] as const
+const steps = ['Describe', 'Schedule', 'Review'] as const
 
 export function BookingFlow({ technician }: { technician?: Technician }) {
   const router = useRouter()
@@ -46,7 +42,6 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
       reader.readAsDataURL(file)
     }
   }
-  const [quoteApproved, setQuoteApproved] = useState(false)
   const [slot, setSlot] = useState<string | null>(null)
   const [selectedDayLabel, setSelectedDayLabel] = useState<string>('Today')
 
@@ -54,8 +49,7 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
 
   const canProceed = () => {
     if (step === 0) return description.trim().length > 5
-    if (step === 1) return quoteApproved
-    if (step === 2) return slot !== null
+    if (step === 1) return slot !== null
     return true
   }
 
@@ -264,85 +258,6 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
           <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-1">
               <h1 className="text-xl font-bold tracking-tight text-foreground">
-                Estimated price range
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Based on similar jobs in your area. This is not the final price.
-              </p>
-            </div>
-
-            {/* AI estimate card */}
-            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
-              <div className="flex items-center gap-2 text-primary">
-                <Sparkles className="size-4" />
-                <span className="text-xs font-semibold uppercase tracking-wide">
-                  AI estimate
-                </span>
-              </div>
-              <p className="mt-3 text-3xl font-bold text-foreground">
-                {technician?.category === 'painting' ? `${formatPKR(8000)} – ${formatPKR(15000)}` :
-                 technician?.category === 'electrical' ? `${formatPKR(1500)} – ${formatPKR(3000)}` :
-                 `${formatPKR(2000)} – ${formatPKR(3500)}`}
-              </p>
-              <div className="mt-3 flex items-start gap-2 rounded-xl bg-background/70 p-3">
-                <Info className="mt-0.5 size-4 shrink-0 text-primary" />
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Estimate only — the final quote requires the technician&apos;s
-                  approval after they review your job details.
-                </p>
-              </div>
-            </div>
-
-            {/* mandatory quote approval */}
-            <div
-              className={cn(
-                'rounded-2xl border-2 p-5 transition-colors',
-                quoteApproved ? 'border-success bg-success-muted/40' : 'border-warning',
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <ShieldCheck
-                  className={cn(
-                    'size-5',
-                    quoteApproved ? 'text-success' : 'text-warning',
-                  )}
-                />
-                <h2 className="text-sm font-semibold text-foreground">
-                  Quote approval required
-                </h2>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                No work begins until you approve a fixed quote from your chosen
-                technician. This protects you from surprise charges.
-              </p>
-              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl bg-background p-3 border border-border/50">
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={quoteApproved}
-                  onClick={() => setQuoteApproved((v) => !v)}
-                  className={cn(
-                    'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors',
-                    quoteApproved
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-card',
-                  )}
-                >
-                  {quoteApproved && <Check className="size-3.5" />}
-                </button>
-                <span className="text-sm text-foreground">
-                  I understand that the estimate is not final and I&apos;ll
-                  approve a fixed quote before any work starts.
-                </span>
-              </label>
-            </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-1">
-              <h1 className="text-xl font-bold tracking-tight text-foreground">
                 When should we come?
               </h1>
               <p className="text-sm text-muted-foreground">
@@ -362,7 +277,7 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 2 && (
           <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-1">
               <h1 className="text-xl font-bold tracking-tight text-foreground">
@@ -400,15 +315,6 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
                   <img src={photoUrl} alt="Attached Preview" className="w-20 h-20 object-cover rounded-lg border border-border mt-0.5" />
                 </div>
               )}
-              <div className="border-t border-border pt-3">
-                <ReviewRow
-                  label="Estimated range"
-                  value={technician?.category === 'painting' ? `${formatPKR(8000)} – ${formatPKR(15000)}` :
-                         technician?.category === 'electrical' ? `${formatPKR(1500)} – ${formatPKR(3000)}` :
-                         `${formatPKR(2000)} – ${formatPKR(3500)}`}
-                  emphasize
-                />
-              </div>
             </div>
 
             <div className="flex items-start gap-2 rounded-xl bg-success-muted p-3">
