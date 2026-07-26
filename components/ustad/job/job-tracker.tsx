@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import Link from "next/link"
 import {
   Phone,
@@ -40,6 +40,17 @@ export function JobTracker({ job }: { job: Job }) {
   const [reviewSubmitted, setReviewSubmitted] = useState(false)
   const [rating, setRating] = useState(5)
   const [quoteAmount, setQuoteAmount] = useState(job.quoteAmount)
+  const [techName, setTechName] = useState(job.technicianName)
+
+  // Hydrate stored technician name from booking flow if available
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedName = localStorage.getItem(`ustad_tech_name_${job.technicianId}`) || localStorage.getItem('ustad_last_booked_tech_name')
+      if (storedName) {
+        setTechName(storedName)
+      }
+    }
+  }, [job.technicianId])
 
   const bothConfirmed = customerConfirmed && technicianConfirmed
   const effectiveStep: JobStatusKey = bothConfirmed ? "payment_confirmed" : currentStep
@@ -131,7 +142,7 @@ export function JobTracker({ job }: { job: Job }) {
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 <p className="text-sm text-muted-foreground">
-                  {job.technicianName} has reviewed your request and sent a fixed quote.
+                  {techName} has reviewed your request and sent a fixed quote.
                 </p>
                 <div className="flex items-center justify-between rounded-xl bg-background p-4 border border-border">
                   <span className="text-sm text-muted-foreground">Inspection Fee</span>
@@ -171,7 +182,7 @@ export function JobTracker({ job }: { job: Job }) {
                 <CardContent>
                   <MapPlaceholder className="h-56" pins={[{ top: "38%", left: "46%", active: true }]} />
                   <p className="mt-3 text-sm text-muted-foreground">
-                    {job.technicianName} is en route to {job.area}.
+                    {techName} is en route to {job.area}.
                   </p>
                 </CardContent>
               </Card>
@@ -199,7 +210,7 @@ export function JobTracker({ job }: { job: Job }) {
                     caption={customerConfirmed ? "Confirmed payment" : "Tap after paying cash"}
                   />
                   <ConfirmTile
-                    label={job.technicianName}
+                    label={techName}
                     confirmed={technicianConfirmed}
                     caption={technicianConfirmed ? "Confirmed receipt" : "Waiting for technician"}
                   />
@@ -273,7 +284,7 @@ export function JobTracker({ job }: { job: Job }) {
                       ))}
                     </div>
                     <Textarea
-                      placeholder={`Tell others about your experience with ${job.technicianName}...`}
+                      placeholder={`Tell others about your experience with ${techName}...`}
                       rows={3}
                     />
                     <Button className="tap w-fit" onClick={() => setReviewSubmitted(true)}>
@@ -304,7 +315,7 @@ export function JobTracker({ job }: { job: Job }) {
                     href={`/technician/${job.technicianId}`}
                     className="font-semibold hover:text-primary"
                   >
-                    {job.technicianName}
+                    {techName}
                   </Link>
                   <div className="mt-0.5">
                     <StarRating rating={4.9} size="sm" showValue />

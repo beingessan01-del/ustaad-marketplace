@@ -56,8 +56,15 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
   const next = () => {
     if (step < steps.length - 1) setStep((s) => s + 1)
     else {
-      // Navigate to the dynamic job page representing the booked technician
+      // Store technician details in localStorage for dynamic job page hydration
       const id = technician?.id || 'usman-khan'
+      if (technician) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`ustad_tech_name_${id}`, technician.name)
+          localStorage.setItem('ustad_last_booked_tech_name', technician.name)
+          localStorage.setItem('ustad_last_booked_tech_id', id)
+        }
+      }
       router.push(`/jobs/${id}`)
     }
   }
