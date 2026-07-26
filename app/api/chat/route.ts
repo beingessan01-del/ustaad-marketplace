@@ -4,18 +4,20 @@ export const dynamic = 'force-dynamic'
 
 // System instructions for Ustad Chat Assistant
 const SYSTEM_PROMPT = `
-You are the USTAD AI Chat Assistant, a friendly and professional conversational partner for the USTAD home services marketplace in Pakistan (operating in Islamabad/Rawalpindi).
-Your goal is to help customers:
-1. Estimate prices for services (always present as ranges, e.g., Rs. 800 - 1,500, and include the disclaimer: "final price confirmed by technician's quote before work begins").
-2. Check technician availability (roughly how many techs are online, wait times).
-3. Draft a booking card (pre-filling details so they can confirm with one tap).
-4. Review recent service history.
+You are the USTAD AI Chat Assistant, a friendly and knowledgeable conversational assistant for the USTAD home services marketplace in Pakistan (Islamabad & Rawalpindi).
 
-GUARDRAILS:
-- Keep replies very short: 2 to 4 sentences maximum.
-- Never say you have charged, booked, or dispatched anyone. Only state that you have "drafted" a request which they can confirm.
-- If a request is ambiguous, ask clarifying questions (e.g., "leak" -> ask if it's kitchen sink or toilet pipes, how urgent).
-- Respond in the language they write in (English or Urdu).
+YOUR GOAL:
+1. Answer customer questions conversationally, helpfully, and accurately about home services, DIY troubleshooting tips, pricing, coverage areas, and platform features.
+2. ONLY call tools when specifically requested or relevant:
+   - Call 'get_price_estimate' when the user asks about prices or rates.
+   - Call 'check_technician_availability' when the user asks if technicians are available or wait times.
+   - Call 'draft_booking' ONLY when the user explicitly asks to book, hire, or request a technician.
+   - Call 'get_customer_service_history' when the user asks about past orders or booking history.
+
+GUIDELINES:
+- For general questions (e.g., greetings, how the platform works, payment info, DIY repair advice, coverage areas), respond with clear, friendly text without creating draft booking cards.
+- Keep replies concise, helpful, and natural (2 to 4 sentences).
+- Always respond in the language used by the user (English or Urdu).
 `
 
 // Tool definitions for Claude
@@ -236,96 +238,40 @@ Available tools:
       return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
     }
 
-    // fallback simulation if Anthropic API key is not configured
+    // 3. Intelligent conversational response engine for local simulation
     const encoder = new TextEncoder()
-    const query = lastUserMessage.toLowerCase()
+    const query = lastUserMessage.toLowerCase().trim()
+    const isUrduQuery = locale === 'ur' || /[\u0600-\u06FF]/.test(lastUserMessage)
+
+    // Determine matching category if relevant
+    let matchedCategory = 'plumbing'
+    if (query.includes('elect') || query.includes('wire') || query.includes('light') || query.includes('switch') || query.includes('بجلی')) {
+      matchedCategory = 'electrical'
+    } else if (query.includes('ac') || query.includes('generator') || query.includes('motor') || query.includes('fridge') || query.includes('مکینک')) {
+      matchedCategory = 'mechanic'
+    } else if (query.includes('paint') || query.includes('wall') || query.includes('color') || query.includes('رنگ')) {
+      matchedCategory = 'painting'
+    } else if (query.includes('clean') || query.includes('wash') || query.includes('sofa') || query.includes('carpet') || query.includes('سفائی')) {
+      matchedCategory = 'cleaning'
+    } else if (query.includes('wood') || query.includes('door') || query.includes('carpenter') || query.includes('table') || query.includes('فرنیچر')) {
+      matchedCategory = 'carpentry'
+    }
 
     let responseText = ''
     let toolCallPayload: any = null
 
-    // Determine matching category
-    let matchedCategory = 'plumbing'
-    if (query.includes('elect') || query.includes('wire') || query.includes('light') || query.includes('بجلی')) {
-      matchedCategory = 'electrical'
-    } else if (query.includes('ac') || query.includes('generator') || query.includes('motor') || query.includes('مکینک')) {
-      matchedCategory = 'mechanic'
-    } else if (query.includes('paint') || query.includes('wall') || query.includes('رنگ')) {
-      matchedCategory = 'painting'
-    } else if (query.includes('clean') || query.includes('wash') || query.includes('سفائی')) {
-      matchedCategory = 'cleaning'
-    } else if (query.includes('wood') || query.includes('door') || query.includes('carpenter') || query.includes('فرنیچر')) {
-      matchedCategory = 'carpentry'
+    // A. Greetings / Conversational Introductions
+    if (/^(hi|hello|hey|slam|salam|asalam|آسالم|سلام|ہیلو)/i.test(query) || query === 'hi' || query === 'hello') {
+      responseText = isUrduQuery
+        ? 'وعلیکم السلام! میں استاد کا AI اسسٹنٹ ہوں۔ آپ ہوم سروسز، ریٹ لسٹ، یا ٹیکنیشن کی معلومات کے بارے میں کچھ بھی پوچھ سکتے ہیں۔ بتائیں میں آپ کی کیا مدد کروں؟'
+        : 'Asalam-o-Alaikum! I am the USTAD AI Assistant. I can help you with service rates, DIY maintenance tips, checking technician availability, or booking a verified expert. How can I assist you today?'
     }
-
-    // Urdu Response logic
-    const isUrduQuery = locale === 'ur' || /[\u0600-\u06FF]/.test(lastUserMessage)
-
-    if (query.includes('price') || query.includes('how much') || query.includes('rate') || query.includes('قیمت') || query.includes('کرایہ')) {
-      // 1. Price estimate tool simulation
+    // B. Explicit Booking Requests
+    else if (query.includes('book') || query.includes('hire') || query.includes('dispatch') || query.includes('send tech') || query.includes('بکنگ') || query.includes('آرڈر') || query.includes('سروس چاہیے')) {
       if (isUrduQuery) {
-        responseText = `ہماری ریٹ لسٹ کے مطابق، ${matchedCategory} کی سروس کے ریٹس نیچے دیے گئے کارڈ میں دیکھیں۔ یہ ایک عارضی اندازہ ہے، حتمی ریٹ ٹیکنیشن معائنے کے بعد ہی فکس کرے گا۔`
+        responseText = `میں نے آپ کے لیے ${matchedCategory} سروس کا ڈرافٹ تیار کر دیا ہے۔ آپ نیچے کارڈ میں تفصیلات ریویو کر کے درخواست بھیج سکتے ہیں۔`
       } else {
-        responseText = `Based on our standard rate card, here is the price estimate range for ${matchedCategory} services. Please check the estimate card below.`
-      }
-
-      const rates: Record<string, { min: number; max: number }> = {
-        plumbing: { min: 800, max: 1500 },
-        electrical: { min: 600, max: 1200 },
-        mechanic: { min: 1000, max: 2500 },
-        painting: { min: 1500, max: 4500 },
-        cleaning: { min: 1200, max: 3000 },
-        carpentry: { min: 900, max: 2000 },
-      }
-      const rate = rates[matchedCategory] || rates.plumbing
-
-      toolCallPayload = {
-        name: 'get_price_estimate',
-        args: {
-          category: matchedCategory,
-          minPrice: rate.min,
-          maxPrice: rate.max,
-          disclaimer: "final price confirmed by technician's quote before work begins"
-        }
-      }
-    } else if (query.includes('avail') || query.includes('free') || query.includes('wait') || query.includes('ٹیکنیشن') || query.includes('دستیاب')) {
-      // 2. Availability tool simulation
-      const availableTechs = matchedCategory === 'plumbing' ? 2 : 1
-      if (isUrduQuery) {
-        responseText = `اس وقت آپ کے علاقے میں ${matchedCategory} کے ${availableTechs} ٹیکنیشن آن لائن ہیں۔ ان کا اوسطاً پہنچنے کا وقت تقریباً 10-15 منٹ ہے۔`
-      } else {
-        responseText = `Currently, there are ${availableTechs} online ${matchedCategory} technicians near your area. The typical wait time is around 10-15 minutes.`
-      }
-
-      toolCallPayload = {
-        name: 'check_technician_availability',
-        args: {
-          category: matchedCategory,
-          onlineCount: availableTechs,
-          typicalWaitMinutes: 12
-        }
-      }
-    } else if (query.includes('history') || query.includes('last') || query.includes('booked') || query.includes('ہسٹری') || query.includes('پچھلا')) {
-      // 3. History tool simulation
-      if (isUrduQuery) {
-        responseText = `میں نے آپ کی سروس ہسٹری چیک کر لی ہے۔ آپ نے حال ہی میں عثمان خان (پلمبر) کے ساتھ بکنگ کی تھی۔ کیا آپ دوبارہ ان کے ساتھ سروس بک کرنا چاہیں گے؟`
-      } else {
-        responseText = `I checked your recent service history. Your last completed job was with Usman Khan (Plumber). Would you like to book them again?`
-      }
-
-      toolCallPayload = {
-        name: 'get_customer_service_history',
-        args: {
-          lastTechnician: 'Usman Khan',
-          lastCategory: 'plumbing',
-          lastJobId: 'JOB-9104'
-        }
-      }
-    } else {
-      // 4. Draft booking tool simulation
-      if (isUrduQuery) {
-        responseText = `میں نے آپ کے لیے ${matchedCategory} سروس بکنگ کا ایک ڈرافٹ تیار کر لیا ہے۔ براہ کرم نیچے دیے گئے کارڈ میں تفصیلات چیک کریں اور "درخواست بھیجیں" پر کلک کریں۔`
-      } else {
-        responseText = `I have drafted a booking request for your ${matchedCategory} service. You can review the details on the card below and tap "Confirm & Request" to send it.`
+        responseText = `I have drafted a booking request for your ${matchedCategory} service. You can review the details in the card below and tap "Confirm & Request".`
       }
 
       const rates: Record<string, { min: number; max: number }> = {
@@ -350,6 +296,109 @@ Available tools:
           maxPrice: rate.max
         }
       }
+    }
+    // C. Price & Rate Queries
+    else if (query.includes('price') || query.includes('cost') || query.includes('rate') || query.includes('fee') || query.includes('how much') || query.includes('قیمت') || query.includes('ریٹ')) {
+      if (isUrduQuery) {
+        responseText = `ہماری ریٹ لسٹ کے مطابق ${matchedCategory} کی سروس کی تخمینی رینج نیچے دیکھیں۔ حتمی معائنہ فی بمطابق ریٹنگ زیادہ سے زیادہ Rs. 300 ہے۔`
+      } else {
+        responseText = `Here is the rate estimate range for ${matchedCategory} services. Please check the estimate card below.`
+      }
+
+      const rates: Record<string, { min: number; max: number }> = {
+        plumbing: { min: 800, max: 1500 },
+        electrical: { min: 600, max: 1200 },
+        mechanic: { min: 1000, max: 2500 },
+        painting: { min: 1500, max: 4500 },
+        cleaning: { min: 1200, max: 3000 },
+        carpentry: { min: 900, max: 2000 },
+      }
+      const rate = rates[matchedCategory] || rates.plumbing
+
+      toolCallPayload = {
+        name: 'get_price_estimate',
+        args: {
+          category: matchedCategory,
+          minPrice: rate.min,
+          maxPrice: rate.max,
+          disclaimer: "final inspection fee confirmed before work begins"
+        }
+      }
+    }
+    // D. Availability & Timing
+    else if (query.includes('avail') || query.includes('free') || query.includes('wait') || query.includes('timing') || query.includes('دستیاب') || query.includes('ٹیکنیشن')) {
+      const availableTechs = matchedCategory === 'plumbing' ? 3 : 2
+      if (isUrduQuery) {
+        responseText = `اس وقت آپ کے علاقے میں ${matchedCategory} کے ${availableTechs} ٹیکنیشن آن لائن ہیں اور پہنچنے کا اوسطاً وقت 10 سے 15 منٹ ہے۔`
+      } else {
+        responseText = `Currently, there are ${availableTechs} online ${matchedCategory} technicians near your area with an estimated arrival time of 10-15 minutes.`
+      }
+
+      toolCallPayload = {
+        name: 'check_technician_availability',
+        args: {
+          category: matchedCategory,
+          onlineCount: availableTechs,
+          typicalWaitMinutes: 12
+        }
+      }
+    }
+    // E. Booking History
+    else if (query.includes('history') || query.includes('past') || query.includes('previous') || query.includes('پچھلا') || query.includes('ہسٹری')) {
+      if (isUrduQuery) {
+        responseText = `آپ کی حالیہ بکنگ ہسٹری چیک کر لی گئی ہے: آخری آرڈر عثمان خان (پلمبر) کے ساتھ مکمل ہوا تھا۔`
+      } else {
+        responseText = `I fetched your recent service history. Your last completed job was with Usman Khan (Plumber).`
+      }
+
+      toolCallPayload = {
+        name: 'get_customer_service_history',
+        args: {
+          lastTechnician: 'Usman Khan',
+          lastCategory: 'plumbing',
+          lastJobId: 'JOB-9104'
+        }
+      }
+    }
+    // F. Payment Info & How Payment Works
+    else if (query.includes('pay') || query.includes('cash') || query.includes('card') || query.includes('پیسے') || query.includes('ادائیگی')) {
+      responseText = isUrduQuery
+        ? 'استاد پلیٹ فارم پر تمام ادائیگیاں کام مکمل ہونے کے بعد نقد (Cash on Completion) کی جاتی ہیں۔ کوئی آن لائن پیشگی رقم کی ضرورت نہیں ہے۔'
+        : 'On USTAD, all payments are made in Cash on Completion after the technician completes the work. No upfront online charge is required.'
+    }
+    // G. Service Offerings
+    else if (query.includes('service') || query.includes('offer') || query.includes('what can you do') || query.includes('سروسز')) {
+      responseText = isUrduQuery
+        ? 'ہم درج ذیل سروسز فراہم کرتے ہیں: پلمبنگ، الیکٹریکل، اے سی و مکینک، پینٹنگ، ہوم ڈیپ کلیننگ، اور کارپینٹری۔ آپ کسی بھی سروس کا ریٹ یا ٹیکنیشن پوچھ سکتے ہیں۔'
+        : 'USTAD offers verified professionals for Plumbing, Electrical, AC & Appliances, Painting, Deep Cleaning, and Carpentry across Islamabad and Rawalpindi.'
+    }
+    // H. Coverage Area / Location
+    else if (query.includes('area') || query.includes('location') || query.includes('city') || query.includes('islamabad') || query.includes('rawalpindi') || query.includes('علاقہ')) {
+      responseText = isUrduQuery
+        ? 'استاد کی سروسز اسلام آباد (F-6, F-7, F-8, G-8, G-9, G-11, DHA) اور راولپنڈی (بحریا ٹاؤن، صدر) کے تمام علاقوں میں دستیاب ہیں۔'
+        : 'USTAD services cover all major sectors in Islamabad (F-6, F-7, F-8, G-8, G-9, G-11, DHA) and Rawalpindi (Bahria Town, Saddar, etc.).'
+    }
+    // I. DIY Troubleshooting & Repair Tips
+    else if (query.includes('leak') || query.includes('clog') || query.includes('fuse') || query.includes('noise') || query.includes('fix') || query.includes('clean') || query.includes('tip') || query.includes('خراب')) {
+      if (query.includes('leak') || query.includes('water')) {
+        responseText = isUrduQuery
+          ? 'اگر پانی لیک ہو رہا ہے تو پہلے مین والو بند کریں اور کنکشن پائپ چیک کریں۔ اگر مسئلہ حل نہ ہو تو پلمبر بک کریں۔'
+          : 'For pipe leaks, first turn off the local shutoff valve under the sink or main supply. Check if the hose connector is loose. If needed, I can connect you with an expert plumber.'
+      } else if (query.includes('elect') || query.includes('wire') || query.includes('fuse')) {
+        responseText = isUrduQuery
+          ? 'اگر بجلی چلی گئی ہے تو مین ڈی بی بورڈ میں بریکر چیک کریں۔ اگر بریکر ٹرپ ہوا ہے تو اسے آن کریں۔ محفوظ رہیں۔'
+          : 'For electrical issues, first check your main breaker panel (DB box) to see if a trip occurred. Always handle electrical fittings with dry hands.'
+      } else {
+        responseText = isUrduQuery
+          ? 'مسئلہ حل کرنے کے لیے پہلے بنیادی وجہ چیک کریں، اگر ضرورت ہو تو ہم اپنے تصدیق شدہ استاد کو آپ کے گھر بھیج سکتے ہیں۔'
+          : 'For troubleshooting, inspect the connections carefully. If you need hands-on assistance, let me know and I can get a verified technician assigned.'
+      }
+    }
+    // J. General Conversational Questions
+    else {
+      responseText = isUrduQuery
+        ? `آپ کا سوال موصول ہو گیا ہے۔ میں استاد کا AI اسسٹنٹ ہوں۔ آپ قیمتوں، ٹیکنیشن کی دستیابی، یا گھر کی سروسز کے بارے میں کچھ بھی پوچھ سکتے ہیں۔`
+        : `I am the USTAD AI Assistant. I can help answer questions about our home repair services, rate card estimates, technician availability, or guide you through booking a specialist.`
     }
 
     const stream = new ReadableStream({
