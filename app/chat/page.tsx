@@ -257,9 +257,9 @@ export default function ChatPage() {
       status: 'pending',
       search_radius_km: 1.5,
       description: args.description || 'AI Drafted Booking',
-      price_estimate_min: args.minPrice || 1000,
-      price_estimate_max: args.maxPrice || 1500,
-      price: args.minPrice ? Math.floor((args.minPrice + args.maxPrice) / 2) : 1200
+      price_estimate_min: args.minPrice || 200,
+      price_estimate_max: args.maxPrice || 3500,
+      price: args.minPrice ? Math.floor((args.minPrice + args.maxPrice) / 2) : (args.maxPrice || 500)
     })
 
     if (error) {

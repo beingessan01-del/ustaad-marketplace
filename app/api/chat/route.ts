@@ -116,12 +116,12 @@ const TOOLS = [
 // Query Supabase issue_price_list and perform issue-level price estimate matching
 async function fetchIssuePriceEstimate(category: string, issueDescription: string) {
   const fallbackRates: Record<string, { min: number; max: number; unit?: string }> = {
-    plumbing: { min: 800, max: 1500, unit: 'per job' },
-    electrical: { min: 600, max: 1200, unit: 'per job' },
-    mechanic: { min: 1000, max: 2500, unit: 'per job' },
-    painting: { min: 1500, max: 4500, unit: 'per job' },
-    cleaning: { min: 1200, max: 3000, unit: 'per job' },
-    carpentry: { min: 900, max: 2000, unit: 'per job' },
+    plumbing: { min: 200, max: 3500, unit: 'per job' },
+    electrical: { min: 300, max: 6000, unit: 'per job' },
+    mechanic: { min: 800, max: 4000, unit: 'per job' },
+    painting: { min: 25, max: 65, unit: 'per sqft' },
+    cleaning: { min: 4, max: 2500, unit: 'per sqft' },
+    carpentry: { min: 200, max: 1500, unit: 'per job' },
   }
 
   try {
@@ -133,7 +133,7 @@ async function fetchIssuePriceEstimate(category: string, issueDescription: strin
         'apikey': supabaseAnonKey,
         'Authorization': `Bearer ${supabaseAnonKey}`
       },
-      next: { revalidate: 3600 }
+      cache: 'no-store'
     })
 
     if (res.ok) {
@@ -499,15 +499,7 @@ Available tools:
         responseText = `I have drafted a booking request for your ${matchedCategory} service. You can review the details in the card below and tap "Confirm & Request".`
       }
 
-      const rates: Record<string, { min: number; max: number }> = {
-        plumbing: { min: 800, max: 1500 },
-        electrical: { min: 600, max: 1200 },
-        mechanic: { min: 1000, max: 2500 },
-        painting: { min: 1500, max: 4500 },
-        cleaning: { min: 1200, max: 3000 },
-        carpentry: { min: 900, max: 2000 },
-      }
-      const rate = rates[matchedCategory] || rates.plumbing
+      const rate = await fetchIssuePriceEstimate(matchedCategory, lastUserMessage)
 
       toolCallPayload = {
         name: 'draft_booking',
@@ -517,13 +509,13 @@ Available tools:
           address: 'House 42, Street 18, F-7/2, Islamabad',
           preferred_time: 'As soon as possible',
           urgency: 'now',
-          minPrice: rate.min,
-          maxPrice: rate.max
+          minPrice: rate.minPrice,
+          maxPrice: rate.maxPrice
         }
       }
     }
     // C. Price & Rate Queries
-    else if (query.includes('price') || query.includes('cost') || query.includes('rate') || query.includes('fee') || query.includes('how much') || query.includes('قیمت') || query.includes('ریٹ')) {
+    else if (query.includes('price') || query.includes('cost') || query.includes('rate') || query.includes('fee') || query.includes('how much') || query.includes('kitne') || query.includes('kitna') || query.includes('kitni') || query.includes('paise') || query.includes('lagan') || query.includes('قیمت') || query.includes('ریٹ') || query.includes('پیسے') || query.includes('کتنے')) {
       const estimateResult = await fetchIssuePriceEstimate(matchedCategory, lastUserMessage)
 
       if (isUrduQuery) {
