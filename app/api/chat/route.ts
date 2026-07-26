@@ -348,23 +348,34 @@ Available tools:
             // Inspect generated stream buffer for tool calls
             if (fullTextBuffer.includes('__TOOL_CALL__:')) {
               const parts = fullTextBuffer.split('__TOOL_CALL__:')
-              const messageText = parts[0]
+              let messageText = parts[0]
               const rawToolJson = parts[1]?.trim() || ''
-
-              // Send non-tool text portion
-              if (messageText.trim()) {
-                controller.enqueue(encoder.encode(messageText))
-              }
 
               if (rawToolJson) {
                 try {
                   const parsedTool = JSON.parse(rawToolJson)
                   const enrichedTool = await enrichToolCallPayload(parsedTool, lastUserMessage)
+
+                  if (enrichedTool.name === 'get_price_estimate' && enrichedTool.args?.isSpecificMatch) {
+                    const isUrdu = locale === 'ur' || /[\u0600-\u06FF]/.test(lastUserMessage)
+                    messageText = isUrdu
+                      ? `ہماری پرائس لسٹ کے مطابق "${enrichedTool.args.issue_name}" کی تخمینی قیمت Rs. ${enrichedTool.args.minPrice} سے Rs. ${enrichedTool.args.maxPrice} (${enrichedTool.args.unit}) ہے۔ نیچے کارڈ دیکھیں۔`
+                      : `Based on our official backend price list, the estimated cost for "${enrichedTool.args.issue_name}" is Rs. ${enrichedTool.args.minPrice} – ${enrichedTool.args.maxPrice} (${enrichedTool.args.unit}). Please check the card below.`
+                  }
+
+                  if (messageText.trim()) {
+                    controller.enqueue(encoder.encode(messageText))
+                  }
                   controller.enqueue(encoder.encode(`\n__TOOL_CALL__:${JSON.stringify(enrichedTool)}`))
                 } catch (e) {
                   console.error('Failed to parse or enrich Groq tool call:', e)
+                  if (messageText.trim()) {
+                    controller.enqueue(encoder.encode(messageText))
+                  }
                   controller.enqueue(encoder.encode(`\n__TOOL_CALL__:${rawToolJson}`))
                 }
+              } else if (messageText.trim()) {
+                controller.enqueue(encoder.encode(messageText))
               }
             } else {
               controller.enqueue(encoder.encode(fullTextBuffer))
