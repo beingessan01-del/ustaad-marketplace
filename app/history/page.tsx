@@ -474,7 +474,7 @@ function HistoryPageContent() {
                             </span>
                           </div>
                           <span className="text-xs font-bold text-foreground font-mono">
-                            {tech ? formatPKR(tech.inspectionFee + (job.status === 'completed' ? 500 : 0)) : '—'}
+                            {tech ? formatPKR(tech.inspectionFee > 0 ? tech.inspectionFee : 300) : formatPKR(300)}
                           </span>
                         </div>
 

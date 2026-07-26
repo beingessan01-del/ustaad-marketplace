@@ -134,7 +134,7 @@ export function JobTracker({ job }: { job: Job }) {
                   {job.technicianName} has reviewed your request and sent a fixed quote.
                 </p>
                 <div className="flex items-center justify-between rounded-xl bg-background p-4 border border-border">
-                  <span className="text-sm text-muted-foreground">Fixed Quote</span>
+                  <span className="text-sm text-muted-foreground">Inspection Fee</span>
                   <span className="text-xl font-bold">{formatPKR(quoteAmount)}</span>
                 </div>
                 <div className="flex gap-2">
@@ -188,7 +188,7 @@ export function JobTracker({ job }: { job: Job }) {
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 <div className="flex items-center justify-between rounded-xl bg-muted p-4">
-                  <span className="text-sm text-muted-foreground">Amount due (cash)</span>
+                  <span className="text-sm text-muted-foreground">Inspection Fee (cash)</span>
                   <span className="text-lg font-bold">{formatPKR(job.quoteAmount)}</span>
                 </div>
 
@@ -336,7 +336,7 @@ export function JobTracker({ job }: { job: Job }) {
               <DetailRow label="Requested" value={job.createdAt} />
               <Separator />
               <DetailRow
-                label="Quote"
+                label="Inspection Fee"
                 value={formatPKR(job.quoteAmount)}
                 emphasize
               />

@@ -24,8 +24,8 @@ export default async function JobPage({
     area: technician ? technician.area : "F-7, Islamabad",
     createdAt: "Jul 12, 2026",
     quoteAmount: technician
-      ? (technician.inspectionFee > 0 ? technician.inspectionFee * 10 : 2500)
-      : 2500,
+      ? (technician.inspectionFee > 0 ? technician.inspectionFee : (technician.rating >= 4.8 ? 300 : technician.rating >= 4.5 ? 250 : 200))
+      : 300,
     currentStep: "in_progress",
     customerConfirmed: false,
     technicianConfirmed: false,
