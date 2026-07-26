@@ -200,6 +200,34 @@ async function fetchIssuePriceEstimate(category: string, issueDescription: strin
   }
 }
 
+// Enrich tool call payload with Supabase issue_price_list metadata if name === 'get_price_estimate'
+async function enrichToolCallPayload(payload: any, lastUserMessage: string) {
+  if (!payload || !payload.name) return payload
+
+  if (payload.name === 'get_price_estimate') {
+    const category = payload.args?.category || 'plumbing'
+    const issueDesc = payload.args?.issue_description || payload.args?.description || lastUserMessage
+    const estimate = await fetchIssuePriceEstimate(category, issueDesc)
+
+    return {
+      ...payload,
+      args: {
+        ...payload.args,
+        category: estimate.category,
+        issue_description: issueDesc,
+        issue_name: estimate.issue_name,
+        minPrice: estimate.minPrice,
+        maxPrice: estimate.maxPrice,
+        unit: estimate.unit,
+        isSpecificMatch: estimate.isSpecificMatch,
+        disclaimer: "final inspection fee confirmed before work begins"
+      }
+    }
+  }
+
+  return payload
+}
+
 export async function POST(req: Request) {
   try {
     const { messages, locale } = await req.json()
@@ -224,7 +252,7 @@ If you decide to invoke a tool, append the following marker text at the end of y
 __TOOL_CALL__:{"name": "tool_name", "args": { ... }}
 
 Available tools:
-1. name: "get_price_estimate", args: { category: "plumbing" | "electrical" | "mechanic" | "painting" | "cleaning" | "carpentry", description?: string }
+1. name: "get_price_estimate", args: { category: "plumbing" | "electrical" | "mechanic" | "painting" | "cleaning" | "carpentry", issue_description?: string }
 2. name: "check_technician_availability", args: { category: "plumbing" | "electrical" | "mechanic" | "painting" | "cleaning" | "carpentry" }
 3. name: "draft_booking", args: { category: "plumbing" | "electrical" | "mechanic" | "painting" | "cleaning" | "carpentry", description: string, address?: string }
 4. name: "get_customer_service_history", args: {}
@@ -249,7 +277,7 @@ Available tools:
         return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
       }
 
-      // Stream Groq response back to client
+      // Stream Groq response back to client with Tool Call Interception & Supabase Enrichment
       const encoder = new TextEncoder()
       const decoder = new TextDecoder()
       const stream = new ReadableStream({
@@ -260,7 +288,9 @@ Available tools:
             return
           }
 
+          let fullTextBuffer = ''
           let buffer = ''
+
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
@@ -278,7 +308,7 @@ Available tools:
                   const data = JSON.parse(jsonStr)
                   const text = data.choices[0]?.delta?.content
                   if (text) {
-                    controller.enqueue(encoder.encode(text))
+                    fullTextBuffer += text
                   }
                 } catch (e) {
                   // ignore parse errors
@@ -286,6 +316,32 @@ Available tools:
               }
             }
           }
+
+          // Inspect generated stream buffer for tool calls
+          if (fullTextBuffer.includes('__TOOL_CALL__:')) {
+            const parts = fullTextBuffer.split('__TOOL_CALL__:')
+            const messageText = parts[0]
+            const rawToolJson = parts[1]?.trim() || ''
+
+            // Send non-tool text portion
+            if (messageText.trim()) {
+              controller.enqueue(encoder.encode(messageText))
+            }
+
+            if (rawToolJson) {
+              try {
+                const parsedTool = JSON.parse(rawToolJson)
+                const enrichedTool = await enrichToolCallPayload(parsedTool, lastUserMessage)
+                controller.enqueue(encoder.encode(`\n__TOOL_CALL__:${JSON.stringify(enrichedTool)}`))
+              } catch (e) {
+                console.error('Failed to parse or enrich Groq tool call:', e)
+                controller.enqueue(encoder.encode(`\n__TOOL_CALL__:${rawToolJson}`))
+              }
+            }
+          } else {
+            controller.enqueue(encoder.encode(fullTextBuffer))
+          }
+
           controller.close()
         }
       })
