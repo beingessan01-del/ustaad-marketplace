@@ -265,88 +265,80 @@ Available tools:
         })
       })
 
-      if (!response.ok) {
-        const errText = await response.text()
+      if (response.ok) {
+        // Stream Groq response back to client with Tool Call Interception & Supabase Enrichment
         const encoder = new TextEncoder()
+        const decoder = new TextDecoder()
         const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(encoder.encode(`Error from Groq API (Status ${response.status}): ${errText}`))
-            controller.close()
-          }
-        })
-        return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
-      }
+          async start(controller) {
+            const reader = response.body?.getReader()
+            if (!reader) {
+              controller.close()
+              return
+            }
 
-      // Stream Groq response back to client with Tool Call Interception & Supabase Enrichment
-      const encoder = new TextEncoder()
-      const decoder = new TextDecoder()
-      const stream = new ReadableStream({
-        async start(controller) {
-          const reader = response.body?.getReader()
-          if (!reader) {
-            controller.close()
-            return
-          }
+            let fullTextBuffer = ''
+            let buffer = ''
 
-          let fullTextBuffer = ''
-          let buffer = ''
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
 
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
+              buffer += decoder.decode(value, { stream: true })
+              const lines = buffer.split('\n')
+              buffer = lines.pop() || ''
 
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
-
-            for (const line of lines) {
-              const cleanLine = line.trim()
-              if (cleanLine.startsWith('data:')) {
-                const jsonStr = cleanLine.slice(5).trim()
-                if (jsonStr === '[DONE]') continue
-                try {
-                  const data = JSON.parse(jsonStr)
-                  const text = data.choices[0]?.delta?.content
-                  if (text) {
-                    fullTextBuffer += text
+              for (const line of lines) {
+                const cleanLine = line.trim()
+                if (cleanLine.startsWith('data:')) {
+                  const jsonStr = cleanLine.slice(5).trim()
+                  if (jsonStr === '[DONE]') continue
+                  try {
+                    const data = JSON.parse(jsonStr)
+                    const text = data.choices[0]?.delta?.content
+                    if (text) {
+                      fullTextBuffer += text
+                    }
+                  } catch (e) {
+                    // ignore parse errors
                   }
-                } catch (e) {
-                  // ignore parse errors
                 }
               }
             }
-          }
 
-          // Inspect generated stream buffer for tool calls
-          if (fullTextBuffer.includes('__TOOL_CALL__:')) {
-            const parts = fullTextBuffer.split('__TOOL_CALL__:')
-            const messageText = parts[0]
-            const rawToolJson = parts[1]?.trim() || ''
+            // Inspect generated stream buffer for tool calls
+            if (fullTextBuffer.includes('__TOOL_CALL__:')) {
+              const parts = fullTextBuffer.split('__TOOL_CALL__:')
+              const messageText = parts[0]
+              const rawToolJson = parts[1]?.trim() || ''
 
-            // Send non-tool text portion
-            if (messageText.trim()) {
-              controller.enqueue(encoder.encode(messageText))
-            }
-
-            if (rawToolJson) {
-              try {
-                const parsedTool = JSON.parse(rawToolJson)
-                const enrichedTool = await enrichToolCallPayload(parsedTool, lastUserMessage)
-                controller.enqueue(encoder.encode(`\n__TOOL_CALL__:${JSON.stringify(enrichedTool)}`))
-              } catch (e) {
-                console.error('Failed to parse or enrich Groq tool call:', e)
-                controller.enqueue(encoder.encode(`\n__TOOL_CALL__:${rawToolJson}`))
+              // Send non-tool text portion
+              if (messageText.trim()) {
+                controller.enqueue(encoder.encode(messageText))
               }
+
+              if (rawToolJson) {
+                try {
+                  const parsedTool = JSON.parse(rawToolJson)
+                  const enrichedTool = await enrichToolCallPayload(parsedTool, lastUserMessage)
+                  controller.enqueue(encoder.encode(`\n__TOOL_CALL__:${JSON.stringify(enrichedTool)}`))
+                } catch (e) {
+                  console.error('Failed to parse or enrich Groq tool call:', e)
+                  controller.enqueue(encoder.encode(`\n__TOOL_CALL__:${rawToolJson}`))
+                }
+              }
+            } else {
+              controller.enqueue(encoder.encode(fullTextBuffer))
             }
-          } else {
-            controller.enqueue(encoder.encode(fullTextBuffer))
+
+            controller.close()
           }
+        })
 
-          controller.close()
-        }
-      })
-
-      return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+        return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+      } else {
+        console.warn(`Groq API returned status ${response.status}, falling back to local simulation engine.`)
+      }
     }
 
     // 2. If Anthropic API Key is configured, use Claude
