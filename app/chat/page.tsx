@@ -381,11 +381,13 @@ export default function ChatPage() {
                             ) : <Wrench className="size-4" />}
                           </span>
                           <span className="text-xs font-bold capitalize text-foreground">
-                            {msg.toolCall.args.category} Rate Estimate
+                            {msg.toolCall.args.issue_name || `${msg.toolCall.args.category} Rate Estimate`}
                           </span>
                         </div>
                         <div className="flex flex-col border-t border-b border-border/40 py-2">
-                          <span className="text-[10px] text-muted-foreground">Estimated Range</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {msg.toolCall.args.unit ? `Estimated Range (${msg.toolCall.args.unit})` : 'Estimated Range'}
+                          </span>
                           <span className="text-base font-bold text-foreground font-mono mt-0.5">
                             {formatPKR(msg.toolCall.args.minPrice)} – {formatPKR(msg.toolCall.args.maxPrice)}
                           </span>

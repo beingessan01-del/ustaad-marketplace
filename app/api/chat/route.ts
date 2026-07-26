@@ -24,11 +24,12 @@ GUIDELINES:
 const TOOLS = [
   {
     name: 'get_price_estimate',
-    description: 'Retrieve the rate-card estimate range for a service category.',
+    description: 'Retrieve the rate-card estimate range for a specific issue or service category.',
     input_schema: {
       type: 'object',
       properties: {
         category: { type: 'string', enum: ['plumbing', 'electrical', 'mechanic', 'painting', 'cleaning', 'carpentry'] },
+        issue_description: { type: 'string', description: 'Free-text description of the user issue or problem (e.g. "leaking tap", "AC nahi thanda ho raha", "wall repaint")' },
         description: { type: 'string', description: 'Quick description of the problem' },
         area: { type: 'string', description: 'Sector or neighborhood name, e.g. F-7' }
       },
@@ -72,6 +73,132 @@ const TOOLS = [
     }
   }
 ]
+
+// Query Supabase issue_price_list and perform issue-level price estimate matching
+async function fetchIssuePriceEstimate(category: string, issueDescription: string) {
+  const fallbackRates: Record<string, { min: number; max: number; unit?: string }> = {
+    plumbing: { min: 800, max: 1500, unit: 'per job' },
+    electrical: { min: 600, max: 1200, unit: 'per job' },
+    mechanic: { min: 1000, max: 2500, unit: 'per job' },
+    painting: { min: 1500, max: 4500, unit: 'per job' },
+    cleaning: { min: 1200, max: 3000, unit: 'per job' },
+    carpentry: { min: 900, max: 2000, unit: 'per job' },
+  }
+
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://pebbjenmssvavvvdiqlq.supabase.co'
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBlYmJqZW5tc3N2YXZ2dmRpcWxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NTgxNDcsImV4cCI6MjA5OTMzNDE0N30.5_6tbEmm9ovtBrrQ9cBp6_d71fhQ93OnYd59YzeWSWM'
+
+    const res = await fetch(`${supabaseUrl}/rest/v1/issue_price_list?select=*`, {
+      headers: {
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`
+      },
+      next: { revalidate: 3600 }
+    })
+
+    if (res.ok) {
+      const issueList: Array<{
+        id: string
+        issue_name: string
+        category: string
+        price_min: number
+        price_max: number
+        unit: string
+      }> = await res.json()
+
+      const textToMatch = (issueDescription || '').toLowerCase().trim()
+
+      if (textToMatch && issueList.length > 0) {
+        let bestMatch: typeof issueList[0] | null = null
+        let maxScore = 0
+
+        for (const item of issueList) {
+          let score = 0
+          const itemIssue = item.issue_name.toLowerCase()
+          const itemCat = item.category.toLowerCase()
+
+          if (category && itemCat === category.toLowerCase()) {
+            score += 1
+          }
+
+          const words = textToMatch.split(/\s+/)
+          for (const word of words) {
+            if (word.length < 3 && word !== 'ac' && word !== 'tv') continue
+            if (itemIssue.includes(word)) {
+              score += 3
+            }
+          }
+
+          // Specific Roman Urdu / Casual English rules
+          if ((textToMatch.includes('tap') || textToMatch.includes('nalki')) && itemIssue.includes('tap')) {
+            if (textToMatch.includes('leak') || textToMatch.includes('small') || textToMatch.includes('change')) {
+              if (itemIssue.includes('small tap')) score += 10
+            } else if (itemIssue.includes('mixer') || itemIssue.includes('repair')) {
+              score += 8
+            } else {
+              score += 6
+            }
+          }
+
+          if ((textToMatch.includes('ac') || textToMatch.includes('a/c')) && itemCat === 'mechanic') {
+            if (textToMatch.includes('thanda') || textToMatch.includes('cool') || textToMatch.includes('cooling') || textToMatch.includes('nahi')) {
+              if (itemIssue.includes('ac not cooling')) score += 12
+            } else if (textToMatch.includes('gas') || textToMatch.includes('filling')) {
+              if (itemIssue.includes('gas refilling')) score += 12
+            } else if (textToMatch.includes('clean') || textToMatch.includes('service')) {
+              if (itemIssue.includes('cleaning')) score += 12
+            } else if (textToMatch.includes('install')) {
+              if (itemIssue.includes('installation')) score += 12
+            } else {
+              if (itemIssue.includes('ac not cooling')) score += 5
+            }
+          }
+
+          if ((textToMatch.includes('drain') || textToMatch.includes('clog') || textToMatch.includes('band')) && itemIssue.includes('drain')) {
+            if (textToMatch.includes('sink') || textToMatch.includes('basin')) {
+              if (itemIssue.includes('sink')) score += 10
+            } else {
+              if (itemIssue.includes('toilet')) score += 8
+            }
+          }
+
+          if ((textToMatch.includes('breaker') || textToMatch.includes('fuse')) && itemIssue.includes('breaker')) {
+            score += 10
+          }
+
+          if (score > maxScore && score >= 4) {
+            maxScore = score
+            bestMatch = item
+          }
+        }
+
+        if (bestMatch) {
+          return {
+            category: bestMatch.category,
+            minPrice: bestMatch.price_min,
+            maxPrice: bestMatch.price_max,
+            unit: bestMatch.unit || 'per job',
+            issue_name: bestMatch.issue_name,
+            isSpecificMatch: true
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching issue_price_list:', err)
+  }
+
+  const fallback = fallbackRates[category] || fallbackRates.plumbing
+  return {
+    category,
+    minPrice: fallback.min,
+    maxPrice: fallback.max,
+    unit: fallback.unit || 'per job',
+    issue_name: `${category ? category.charAt(0).toUpperCase() + category.slice(1) : 'Standard'} Rate Estimate`,
+    isSpecificMatch: false
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -299,28 +426,28 @@ Available tools:
     }
     // C. Price & Rate Queries
     else if (query.includes('price') || query.includes('cost') || query.includes('rate') || query.includes('fee') || query.includes('how much') || query.includes('قیمت') || query.includes('ریٹ')) {
-      if (isUrduQuery) {
-        responseText = `ہماری ریٹ لسٹ کے مطابق ${matchedCategory} کی سروس کی تخمینی رینج نیچے دیکھیں۔ حتمی معائنہ فی بمطابق ریٹنگ زیادہ سے زیادہ Rs. 300 ہے۔`
-      } else {
-        responseText = `Here is the rate estimate range for ${matchedCategory} services. Please check the estimate card below.`
-      }
+      const estimateResult = await fetchIssuePriceEstimate(matchedCategory, lastUserMessage)
 
-      const rates: Record<string, { min: number; max: number }> = {
-        plumbing: { min: 800, max: 1500 },
-        electrical: { min: 600, max: 1200 },
-        mechanic: { min: 1000, max: 2500 },
-        painting: { min: 1500, max: 4500 },
-        cleaning: { min: 1200, max: 3000 },
-        carpentry: { min: 900, max: 2000 },
+      if (isUrduQuery) {
+        responseText = estimateResult.isSpecificMatch
+          ? `ہماری ریٹ لسٹ کے مطابق "${estimateResult.issue_name}" کی تخمینی قیمت نیچے دیکھیں۔`
+          : `ہماری ریٹ لسٹ کے مطابق ${matchedCategory} کی سروس کی تخمینی رینج نیچے دیکھیں۔ حتمی معائنہ فی بمطابق ریٹنگ زیادہ سے زیادہ Rs. 300 ہے۔`
+      } else {
+        responseText = estimateResult.isSpecificMatch
+          ? `Based on our price list, here is the estimate for "${estimateResult.issue_name}". Please check the card below.`
+          : `Here is the general rate estimate range for ${matchedCategory} services. Please check the estimate card below.`
       }
-      const rate = rates[matchedCategory] || rates.plumbing
 
       toolCallPayload = {
         name: 'get_price_estimate',
         args: {
-          category: matchedCategory,
-          minPrice: rate.min,
-          maxPrice: rate.max,
+          category: estimateResult.category,
+          issue_description: lastUserMessage,
+          issue_name: estimateResult.issue_name,
+          minPrice: estimateResult.minPrice,
+          maxPrice: estimateResult.maxPrice,
+          unit: estimateResult.unit,
+          isSpecificMatch: estimateResult.isSpecificMatch,
           disclaimer: "final inspection fee confirmed before work begins"
         }
       }
