@@ -255,7 +255,7 @@ function InstantBookingContent() {
           service_category: category,
           lat: initialLat,
           lng: initialLng,
-          address: 'House 42, Street 18, F-7/2, Islamabad',
+          address: typeof window !== 'undefined' ? (localStorage.getItem('ustad_user_area') || 'Islamabad') : 'Islamabad',
           status: 'pending',
           search_radius_km: 10.0,
           price_estimate_min: 1000,
@@ -705,7 +705,7 @@ function InstantBookingContent() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Address</span>
-                      <span className="font-medium text-foreground truncate max-w-[200px]">House 42, Street 18, F-7/2</span>
+                      <span className="font-medium text-foreground truncate max-w-[200px]">{typeof window !== 'undefined' ? (localStorage.getItem('ustad_user_area') || 'Islamabad') : 'Islamabad'}</span>
                     </div>
                     <div className="flex justify-between border-t border-border/60 pt-2.5">
                       <span className="text-muted-foreground">Dispatch Fee (Cash)</span>

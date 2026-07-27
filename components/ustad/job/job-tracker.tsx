@@ -41,13 +41,18 @@ export function JobTracker({ job }: { job: Job }) {
   const [rating, setRating] = useState(5)
   const [quoteAmount, setQuoteAmount] = useState(job.quoteAmount)
   const [techName, setTechName] = useState(job.technicianName)
+  const [jobLocation, setJobLocation] = useState(job.area)
 
-  // Hydrate stored technician name from booking flow if available
+  // Hydrate stored technician name and offer location from booking flow if available
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedName = localStorage.getItem(`ustad_tech_name_${job.technicianId}`) || localStorage.getItem('ustad_last_booked_tech_name')
       if (storedName) {
         setTechName(storedName)
+      }
+      const storedLocation = localStorage.getItem(`ustad_job_location_${job.technicianId}`) || localStorage.getItem('ustad_last_booked_job_location') || localStorage.getItem('ustad_user_area')
+      if (storedLocation) {
+        setJobLocation(storedLocation)
       }
     }
   }, [job.technicianId])
@@ -182,7 +187,7 @@ export function JobTracker({ job }: { job: Job }) {
                 <CardContent>
                   <MapPlaceholder className="h-56" pins={[{ top: "38%", left: "46%", active: true }]} />
                   <p className="mt-3 text-sm text-muted-foreground">
-                    {techName} is en route to {job.area}.
+                    {techName} is en route to {jobLocation}.
                   </p>
                 </CardContent>
               </Card>
@@ -343,7 +348,7 @@ export function JobTracker({ job }: { job: Job }) {
             <CardContent className="flex flex-col gap-3 text-sm">
               <DetailRow label="Job ID" value={job.id} />
               <DetailRow label="Service" value={job.service} />
-              <DetailRow label="Location" value={job.area} />
+              <DetailRow label="Location" value={jobLocation} />
               <DetailRow label="Requested" value={job.createdAt} />
               <Separator />
               <DetailRow

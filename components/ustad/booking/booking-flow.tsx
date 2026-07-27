@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
@@ -44,6 +44,16 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
   }
   const [slot, setSlot] = useState<string | null>(null)
   const [selectedDayLabel, setSelectedDayLabel] = useState<string>('Today')
+  const [currentLocation, setCurrentLocation] = useState<string>('Islamabad')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedArea = localStorage.getItem('ustad_user_area')
+      if (savedArea) {
+        setCurrentLocation(savedArea)
+      }
+    }
+  }, [])
 
   const scheduleDays = technician?.schedule || defaultSchedule
 
@@ -56,10 +66,13 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
   const next = () => {
     if (step < steps.length - 1) setStep((s) => s + 1)
     else {
-      // Store technician details in localStorage for dynamic job page hydration
+      // Store technician details and offer location in localStorage for dynamic job page hydration
       const id = technician?.id || 'usman-khan'
-      if (technician) {
-        if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined') {
+        const savedArea = localStorage.getItem('ustad_user_area') || currentLocation || 'Islamabad'
+        localStorage.setItem(`ustad_job_location_${id}`, savedArea)
+        localStorage.setItem('ustad_last_booked_job_location', savedArea)
+        if (technician) {
           localStorage.setItem(`ustad_tech_name_${id}`, technician.name)
           localStorage.setItem('ustad_last_booked_tech_name', technician.name)
           localStorage.setItem('ustad_last_booked_tech_id', id)
@@ -315,7 +328,7 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
                   slot ? `${selectedDayLabel}, ${slot}` : 'Not selected'
                 }
               />
-              <ReviewRow label="Location" value={technician?.area || "F-7, Islamabad"} />
+              <ReviewRow label="Location" value={currentLocation} />
               {photoUrl && (
                 <div className="flex flex-col gap-1.5 border-t border-border/40 pt-2.5">
                   <span className="text-[11px] text-muted-foreground">Photo Attachment</span>

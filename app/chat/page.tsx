@@ -253,7 +253,7 @@ export default function ChatPage() {
       service_category: args.category || 'plumbing',
       lat: 33.7294,
       lng: 73.0561,
-      address: args.address || 'House 42, Street 18, F-7/2, Islamabad',
+      address: args.address || (typeof window !== 'undefined' ? (localStorage.getItem('ustad_user_area') || 'Islamabad') : 'Islamabad'),
       status: 'pending',
       search_radius_km: 1.5,
       description: args.description || 'AI Drafted Booking',
