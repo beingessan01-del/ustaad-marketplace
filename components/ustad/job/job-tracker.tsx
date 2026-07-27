@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { StarRating } from "@/components/ustad/star-rating"
 import { MapPlaceholder } from "@/components/ustad/map-placeholder"
-import { formatPKR, type Job, type JobStatusKey } from "@/lib/data"
+import { formatPKR, cleanLocationName, type Job, type JobStatusKey } from "@/lib/data"
 
 const stepOrder: JobStatusKey[] = [
   "requested",
@@ -41,7 +41,7 @@ export function JobTracker({ job }: { job: Job }) {
   const [rating, setRating] = useState(5)
   const [quoteAmount, setQuoteAmount] = useState(job.quoteAmount)
   const [techName, setTechName] = useState(job.technicianName)
-  const [jobLocation, setJobLocation] = useState(job.area)
+  const [jobLocation, setJobLocation] = useState(cleanLocationName(job.area))
 
   // Hydrate stored technician name and offer location from booking flow if available
   useEffect(() => {
@@ -52,7 +52,7 @@ export function JobTracker({ job }: { job: Job }) {
       }
       const storedLocation = localStorage.getItem(`ustad_job_location_${job.technicianId}`) || localStorage.getItem('ustad_last_booked_job_location') || localStorage.getItem('ustad_user_area')
       if (storedLocation) {
-        setJobLocation(storedLocation)
+        setJobLocation(cleanLocationName(storedLocation))
       }
     }
   }, [job.technicianId])

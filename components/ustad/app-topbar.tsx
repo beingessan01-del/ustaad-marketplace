@@ -12,12 +12,15 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { getSectorFromCoords, cleanLocationName } from '@/lib/data'
 
 const SECTOR_PRESETS = [
+  'H-12, Islamabad',
   'F-7, Islamabad',
   'F-8, Islamabad',
   'Blue Area, Islamabad',
   'G-9, Islamabad',
+  'G-11, Islamabad',
   'E-7, Islamabad',
   'I-9, Islamabad',
   'Saddar, Rawalpindi',
@@ -26,7 +29,7 @@ const SECTOR_PRESETS = [
 ]
 
 export function AppTopbar({ area = 'F-7, Islamabad' }: { area?: string }) {
-  const [currentArea, setCurrentArea] = useState(area)
+  const [currentArea, setCurrentArea] = useState(cleanLocationName(area))
   const [isOpen, setIsOpen] = useState(false)
   const [customArea, setCustomArea] = useState('')
   const [detectingGps, setDetectingGps] = useState(false)
@@ -35,14 +38,14 @@ export function AppTopbar({ area = 'F-7, Islamabad' }: { area?: string }) {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ustad_user_area')
       if (saved) {
-        setCurrentArea(saved)
+        setCurrentArea(cleanLocationName(saved))
       }
     }
 
     const handleLocationChange = (e: Event) => {
       const customEvt = e as CustomEvent<string>
       if (customEvt.detail) {
-        setCurrentArea(customEvt.detail)
+        setCurrentArea(cleanLocationName(customEvt.detail))
       }
     }
 
@@ -53,10 +56,11 @@ export function AppTopbar({ area = 'F-7, Islamabad' }: { area?: string }) {
   }, [])
 
   const selectArea = (newArea: string) => {
-    setCurrentArea(newArea)
+    const cleaned = cleanLocationName(newArea)
+    setCurrentArea(cleaned)
     if (typeof window !== 'undefined') {
-      localStorage.setItem('ustad_user_area', newArea)
-      window.dispatchEvent(new CustomEvent('ustad-location-changed', { detail: newArea }))
+      localStorage.setItem('ustad_user_area', cleaned)
+      window.dispatchEvent(new CustomEvent('ustad-location-changed', { detail: cleaned }))
     }
     setIsOpen(false)
   }
@@ -69,9 +73,13 @@ export function AppTopbar({ area = 'F-7, Islamabad' }: { area?: string }) {
           setDetectingGps(false)
           const lat = pos.coords.latitude
           const lng = pos.coords.longitude
+          const detectedSector = getSectorFromCoords(lat, lng)
+
           localStorage.setItem('ustad_customer_lat', String(lat))
           localStorage.setItem('ustad_customer_lng', String(lng))
-          selectArea('Current Location (GPS)')
+          localStorage.setItem('ustad_detected_sector', detectedSector)
+
+          selectArea(detectedSector)
         },
         (err) => {
           setDetectingGps(false)

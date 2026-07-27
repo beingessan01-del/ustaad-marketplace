@@ -8,7 +8,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatPKR, serviceCategories, defaultSchedule, type Technician } from '@/lib/data'
+import { formatPKR, serviceCategories, defaultSchedule, cleanLocationName, type Technician } from '@/lib/data'
 import { Button } from '@/components/ui/button'
 import { SchedulePicker } from '../schedule-picker'
 
@@ -44,13 +44,13 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
   }
   const [slot, setSlot] = useState<string | null>(null)
   const [selectedDayLabel, setSelectedDayLabel] = useState<string>('Today')
-  const [currentLocation, setCurrentLocation] = useState<string>('Islamabad')
+  const [currentLocation, setCurrentLocation] = useState<string>('H-12, Islamabad')
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedArea = localStorage.getItem('ustad_user_area')
       if (savedArea) {
-        setCurrentLocation(savedArea)
+        setCurrentLocation(cleanLocationName(savedArea))
       }
     }
   }, [])
@@ -69,7 +69,7 @@ export function BookingFlow({ technician }: { technician?: Technician }) {
       // Store technician details and offer location in localStorage for dynamic job page hydration
       const id = technician?.id || 'usman-khan'
       if (typeof window !== 'undefined') {
-        const savedArea = localStorage.getItem('ustad_user_area') || currentLocation || 'Islamabad'
+        const savedArea = cleanLocationName(localStorage.getItem('ustad_user_area') || currentLocation)
         localStorage.setItem(`ustad_job_location_${id}`, savedArea)
         localStorage.setItem('ustad_last_booked_job_location', savedArea)
         if (technician) {

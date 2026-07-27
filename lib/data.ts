@@ -393,3 +393,79 @@ export const sampleJob: Job = {
 export function formatPKR(amount: number): string {
   return `Rs ${amount.toLocaleString('en-PK')}`
 }
+
+export function getSectorFromCoords(lat: number, lng: number): string {
+  // Islamabad & Rawalpindi Sector Bounding Box Mapping
+  if (lat >= 33.630 && lat <= 33.665 && lng >= 72.960 && lng <= 73.010) {
+    return 'H-12, Islamabad'
+  }
+  if (lat >= 33.645 && lat <= 33.670 && lng >= 73.010 && lng <= 73.050) {
+    return 'H-11, Islamabad'
+  }
+  if (lat >= 33.715 && lat <= 33.740 && lng >= 73.045 && lng <= 73.070) {
+    return 'F-7, Islamabad'
+  }
+  if (lat >= 33.700 && lat <= 33.725 && lng >= 73.020 && lng <= 73.050) {
+    return 'F-8, Islamabad'
+  }
+  if (lat >= 33.725 && lat <= 33.750 && lng >= 73.065 && lng <= 73.090) {
+    return 'F-6, Islamabad'
+  }
+  if (lat >= 33.705 && lat <= 33.720 && lng >= 73.050 && lng <= 73.080) {
+    return 'Blue Area, Islamabad'
+  }
+  if (lat >= 33.680 && lat <= 33.710 && lng >= 73.020 && lng <= 73.060) {
+    return 'G-9, Islamabad'
+  }
+  if (lat >= 33.670 && lat <= 33.705 && lng >= 72.970 && lng <= 73.020) {
+    return 'G-11, Islamabad'
+  }
+  if (lat >= 33.640 && lat <= 33.675 && lng >= 73.040 && lng <= 73.090) {
+    return 'I-9, Islamabad'
+  }
+  if (lat >= 33.700 && lat <= 33.745 && lng >= 72.940 && lng <= 73.040) {
+    return 'E-11, Islamabad'
+  }
+  if (lat >= 33.570 && lat <= 33.615 && lng >= 73.030 && lng <= 73.075) {
+    return 'Saddar, Rawalpindi'
+  }
+  if (lat >= 33.615 && lat <= 33.645 && lng >= 73.060 && lng <= 73.095) {
+    return 'Commercial Market, Rawalpindi'
+  }
+  if (lat >= 33.480 && lat <= 33.560 && lng >= 73.090 && lng <= 73.170) {
+    return 'Bahria Town, Rawalpindi'
+  }
+
+  // Fallback estimation by latitude proximity if outside exact bounding box
+  if (lat > 33.70) return 'F-7, Islamabad'
+  if (lat > 33.65) return 'H-12, Islamabad'
+  if (lat > 33.60) return 'G-9, Islamabad'
+  return 'H-12, Islamabad'
+}
+
+export function cleanLocationName(locationStr?: string | null): string {
+  if (!locationStr) return 'H-12, Islamabad'
+  const trimmed = locationStr.trim()
+  if (
+    trimmed === 'Current Location (GPS)' ||
+    trimmed === 'Current GPS Location' ||
+    trimmed === 'Use Current GPS Location' ||
+    trimmed === 'GPS Location' ||
+    trimmed.toLowerCase().includes('current gps') ||
+    trimmed.toLowerCase().includes('location (gps)')
+  ) {
+    if (typeof window !== 'undefined') {
+      const savedSector = localStorage.getItem('ustad_detected_sector')
+      if (savedSector && !savedSector.toLowerCase().includes('gps')) {
+        return savedSector
+      }
+      const lat = localStorage.getItem('ustad_customer_lat')
+      const lng = localStorage.getItem('ustad_customer_lng')
+      if (lat && lng) {
+        return getSectorFromCoords(parseFloat(lat), parseFloat(lng))
+      }
+    }
+    return 'H-12, Islamabad'
+  }
+  return trimmed
+}

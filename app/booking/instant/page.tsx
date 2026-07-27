@@ -17,6 +17,7 @@ import {
   CheckCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { cleanLocationName } from '@/lib/data'
 import { AppTopbar } from '@/components/ustad/app-topbar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -705,7 +706,7 @@ function InstantBookingContent() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Address</span>
-                      <span className="font-medium text-foreground truncate max-w-[200px]">{typeof window !== 'undefined' ? (localStorage.getItem('ustad_user_area') || 'Islamabad') : 'Islamabad'}</span>
+                      <span className="font-medium text-foreground truncate max-w-[200px]">{cleanLocationName(typeof window !== 'undefined' ? localStorage.getItem('ustad_user_area') : null)}</span>
                     </div>
                     <div className="flex justify-between border-t border-border/60 pt-2.5">
                       <span className="text-muted-foreground">Dispatch Fee (Cash)</span>

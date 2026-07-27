@@ -28,6 +28,7 @@ import {
   History
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { cleanLocationName } from '@/lib/data'
 import { AppTopbar } from '@/components/ustad/app-topbar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -957,7 +958,7 @@ export default function TechnicianDashboardPage() {
                     </div>
                     <div className="flex justify-between border-t border-border/40 pt-2.5">
                       <span className="text-muted-foreground">Client Address</span>
-                      <span className="font-bold text-foreground">{activeJob?.address || activeJob?.location || (typeof window !== 'undefined' ? (localStorage.getItem('ustad_last_booked_job_location') || localStorage.getItem('ustad_user_area') || 'Islamabad') : 'Islamabad')}</span>
+                      <span className="font-bold text-foreground">{cleanLocationName(activeJob?.address || activeJob?.location || (typeof window !== 'undefined' ? (localStorage.getItem('ustad_last_booked_job_location') || localStorage.getItem('ustad_user_area')) : null))}</span>
                     </div>
                     <div className="flex justify-between border-t border-border/40 pt-2.5">
                       <span className="text-muted-foreground">Collectable Fee</span>
@@ -1372,7 +1373,7 @@ export default function TechnicianDashboardPage() {
                 </h3>
                 <p className="text-xs text-muted-foreground flex items-center gap-1 justify-center mt-1">
                   <MapPin className="size-3.5 text-primary" />
-                  Location: {incomingOffer.bookings?.address || incomingOffer.bookings?.location || (typeof window !== 'undefined' ? (localStorage.getItem('ustad_last_booked_job_location') || localStorage.getItem('ustad_user_area') || 'Islamabad') : 'Islamabad')}
+                  Location: {cleanLocationName(incomingOffer.bookings?.address || incomingOffer.bookings?.location || (typeof window !== 'undefined' ? (localStorage.getItem('ustad_last_booked_job_location') || localStorage.getItem('ustad_user_area')) : null))}
                 </p>
                 <p className="text-xs text-primary font-bold mt-1.5 uppercase tracking-wider">
                   Inspection Fee: Rs. {getInspectionFee()}
