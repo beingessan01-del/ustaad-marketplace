@@ -7,10 +7,12 @@ import { Home, Map, Clock, User, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/i18n'
 import { Logo } from './logo'
+import { FloatingChatWidget } from '@/components/ustad/chat/floating-chat-widget'
 
 export function CustomerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { t, isRtl } = useTranslation()
+  const isChatPage = pathname === '/chat'
 
   const tabs = [
     {
@@ -84,6 +86,7 @@ export function CustomerLayout({ children }: { children: React.ReactNode }) {
         isRtl ? "md:mr-64" : "md:ml-64"
       )}>
         {children}
+        {!isChatPage && <FloatingChatWidget />}
       </div>
 
       {/* Mobile Bottom Tab Bar (Persistent bottom HUD) */}

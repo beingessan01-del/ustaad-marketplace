@@ -217,3 +217,31 @@
   transform: scaleX(-1);
 }
 
+@keyframes float-idle {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.03);
+  }
+}
+
+.animate-float-idle {
+  animation: float-idle 3.5s ease-in-out infinite;
+}
+
+@keyframes speech-bubble-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-speech-bubble {
+  animation: speech-bubble-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
