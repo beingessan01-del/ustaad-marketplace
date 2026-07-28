@@ -118,21 +118,6 @@ export function CustomerLayout({ children }: { children: React.ReactNode }) {
           )
         })}
       </nav>
-      {/* Floating Chat Bubble Button */}
-      {pathname !== '/chat' && (
-        <Link
-          href="/chat"
-          className={cn(
-            "tap fixed z-30 flex size-12 items-center justify-center rounded-full bg-primary text-white shadow-xl hover:scale-105 active:scale-95 transition-all",
-            isRtl 
-              ? "bottom-20 md:bottom-6 start-4 md:start-6" 
-              : "bottom-20 md:bottom-6 end-4 md:end-6"
-          )}
-          aria-label="Open Chat Assistant"
-        >
-          <MessageSquare className="size-5.5" />
-        </Link>
-      )}
     </div>
   )
 }

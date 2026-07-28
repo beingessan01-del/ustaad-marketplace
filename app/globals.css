@@ -217,19 +217,6 @@
   transform: scaleX(-1);
 }
 
-@keyframes float-idle {
-  0%, 100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-4px) scale(1.03);
-  }
-}
-
-.animate-float-idle {
-  animation: float-idle 3.5s ease-in-out infinite;
-}
-
 @keyframes speech-bubble-pop {
   0% {
     opacity: 0;

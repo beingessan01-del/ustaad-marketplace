@@ -18,6 +18,7 @@ import {
   User,
   FileText,
   Trash2,
+  Bot,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -25,21 +26,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useTranslation } from '@/lib/i18n'
 import { formatPKR } from '@/lib/data'
 import { createClient } from '@/lib/supabase/client'
-
-// Configurable Avatar Asset List (8 pixel art animal characters)
-export const AVATAR_LIST = [
-  '/avatars/avatar1.png', // Fox
-  '/avatars/avatar2.png', // Squirrel / Chipmunk
-  '/avatars/avatar3.png', // Pink Cat
-  '/avatars/avatar4.png', // Otter / Ferret
-  '/avatars/avatar5.png', // Blue Bunny
-  '/avatars/avatar6.png', // Piglet
-  '/avatars/avatar7.png', // Dog / Bear
-  '/avatars/avatar8.png', // Mouse / Panda
-]
-
-// Single customizable size variable (px)
-const ICON_SIZE_PX = 56
 
 type Message = {
   id: string
@@ -51,7 +37,7 @@ type Message = {
   }
 }
 
-const CUTE_SPEECH_MESSAGES = [
+const HELPFUL_SPEECH_MESSAGES = [
   "Need help?",
   "Ask me anything!",
   "Got a question?",
@@ -61,11 +47,8 @@ const CUTE_SPEECH_MESSAGES = [
 
 export function FloatingChatWidget() {
   const router = useRouter()
-  const { locale } = useTranslation()
+  const { locale, isRtl } = useTranslation()
 
-  // 1. Avatar selection logic:
-  // Selected once on mount / navigation session, fixed for the entire visit.
-  const [avatarSrc, setAvatarSrc] = useState<string>(AVATAR_LIST[0])
   const [isOpen, setIsOpen] = useState(false)
   const [speechBubbleText, setSpeechBubbleText] = useState<string>('')
   const [showSpeechBubble, setShowSpeechBubble] = useState(false)
@@ -89,35 +72,18 @@ export function FloatingChatWidget() {
     carpentry: Hammer,
   }
 
-  // Session-bound avatar initialization (never changes mid-session)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      let storedIndex = sessionStorage.getItem('ustad_floating_avatar_index')
-      if (storedIndex === null) {
-        // Pick a random avatar index for this visit session
-        const randomIndex = Math.floor(Math.random() * AVATAR_LIST.length)
-        storedIndex = String(randomIndex)
-        sessionStorage.setItem('ustad_floating_avatar_index', storedIndex)
-      }
-      const indexNum = Math.min(Math.max(parseInt(storedIndex, 10) || 0, 0), AVATAR_LIST.length - 1)
-      setAvatarSrc(AVATAR_LIST[indexNum])
-    }
-  }, [])
-
-  // Speech bubble timing behavior
+  // Speech bubble timing behavior (attached to bottom-right message button)
   useEffect(() => {
     if (isOpen) {
       setShowSpeechBubble(false)
       return
     }
 
-    // Delay 2s before showing initial speech bubble
     const timer1 = setTimeout(() => {
-      const msg = CUTE_SPEECH_MESSAGES[Math.floor(Math.random() * CUTE_SPEECH_MESSAGES.length)]
+      const msg = HELPFUL_SPEECH_MESSAGES[Math.floor(Math.random() * HELPFUL_SPEECH_MESSAGES.length)]
       setSpeechBubbleText(msg)
       setShowSpeechBubble(true)
 
-      // Hide after 7s
       const timer2 = setTimeout(() => {
         setShowSpeechBubble(false)
       }, 7000)
@@ -125,10 +91,9 @@ export function FloatingChatWidget() {
       return () => clearTimeout(timer2)
     }, 2000)
 
-    // Repeat speech bubble every 24s
     const interval = setInterval(() => {
       if (!isOpen) {
-        const msg = CUTE_SPEECH_MESSAGES[Math.floor(Math.random() * CUTE_SPEECH_MESSAGES.length)]
+        const msg = HELPFUL_SPEECH_MESSAGES[Math.floor(Math.random() * HELPFUL_SPEECH_MESSAGES.length)]
         setSpeechBubbleText(msg)
         setShowSpeechBubble(true)
         setTimeout(() => setShowSpeechBubble(false), 7000)
@@ -143,7 +108,6 @@ export function FloatingChatWidget() {
 
   // Initialize message history & rate limits
   useEffect(() => {
-    // 1. Rate limits
     const today = new Date().toDateString()
     let count = 0
     try {
@@ -157,7 +121,6 @@ export function FloatingChatWidget() {
     } catch (e) {}
     setRateLimitCount(count)
 
-    // 2. Load session chat history or set default welcome message
     try {
       const savedSessionMessages = sessionStorage.getItem('ustad_floating_chat_history')
       if (savedSessionMessages) {
@@ -366,32 +329,39 @@ export function FloatingChatWidget() {
   return (
     <div
       ref={widgetRef}
-      className="fixed bottom-20 sm:bottom-6 left-4 md:left-[272px] z-50 flex flex-col items-start select-none font-sans"
+      className={cn(
+        "fixed z-40 select-none font-sans",
+        isRtl ? "bottom-20 md:bottom-6 start-4 md:start-6" : "bottom-20 md:bottom-6 end-4 md:end-6"
+      )}
     >
-      {/* 1. SPEECH BUBBLE (Above Icon) */}
+      {/* 1. SPEECH BUBBLE (Above Message Button) */}
       {showSpeechBubble && !isOpen && (
-        <div className="absolute -top-12 left-0 mb-2 z-50 animate-speech-bubble pointer-events-none">
+        <div className={cn(
+          "absolute -top-12 z-50 animate-speech-bubble pointer-events-none",
+          isRtl ? "start-0" : "end-0"
+        )}>
           <div className="relative bg-card text-foreground text-xs font-bold px-3 py-1.5 rounded-2xl shadow-lg border border-border flex items-center gap-1.5 whitespace-nowrap">
             <span className="text-primary">✨</span>
             <span>{speechBubbleText}</span>
-            <div className="absolute -bottom-1.5 left-5 w-3 h-3 bg-card border-r border-b border-border rotate-45" />
+            <div className={cn(
+              "absolute -bottom-1.5 w-3 h-3 bg-card border-r border-b border-border rotate-45",
+              isRtl ? "start-5" : "end-5"
+            )} />
           </div>
         </div>
       )}
 
-      {/* 2. HOVERING CHAT WINDOW (Opens above icon) */}
+      {/* 2. HOVERING CHAT WINDOW (Opens above bottom-right blue message button) */}
       {isOpen && (
-        <div className="fixed bottom-24 left-4 sm:left-6 md:left-[272px] z-50 w-[calc(100vw-32px)] sm:w-[380px] h-[520px] max-h-[75vh] sm:max-h-[560px] bg-card rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-200">
+        <div className={cn(
+          "fixed bottom-36 md:bottom-20 z-50 w-[calc(100vw-32px)] sm:w-[380px] h-[520px] max-h-[75vh] sm:max-h-[560px] bg-card rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-200",
+          isRtl ? "start-4 md:start-6" : "end-4 md:end-6"
+        )}>
           {/* Header */}
           <div className="bg-muted/80 backdrop-blur-md px-3.5 py-2.5 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              {/* Cute pixel animal avatar in header */}
-              <div className="relative size-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center p-1 overflow-hidden shrink-0">
-                <img
-                  src={avatarSrc}
-                  alt="USTAD AI Avatar"
-                  className="w-full h-full object-contain"
-                />
+              <div className="size-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
+                <Bot className="size-4.5" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
@@ -642,33 +612,19 @@ export function FloatingChatWidget() {
         </div>
       )}
 
-      {/* 3. FLOATING CHAT AVATAR BUTTON (Dashboard Left Side) */}
+      {/* 3. EXISTING CIRCULAR BLUE MESSAGE BUTTON TRIGGER (Bottom-Right Corner) */}
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        style={{ width: `${ICON_SIZE_PX}px`, height: `${ICON_SIZE_PX}px` }}
-        className={cn(
-          "tap relative rounded-full bg-card border-2 border-primary/30 shadow-xl flex items-center justify-center p-1.5 overflow-hidden transition-transform duration-200 hover:scale-105 active:scale-95 group focus:outline-none focus:ring-2 focus:ring-primary/40",
-          !isOpen && "animate-float-idle"
-        )}
-        aria-label="Open AI Assistant Chat"
+        className="tap flex size-12 items-center justify-center rounded-full bg-primary text-white shadow-xl hover:scale-105 active:scale-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40"
+        aria-label="Open Chat Assistant"
         title="Open USTAD AI Assistant"
       >
-        {/* Soft radial aura glow */}
-        <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-primary/10 via-transparent to-primary/20 pointer-events-none" />
-
-        {/* Cute Pixel Animal Avatar Image */}
-        <img
-          src={avatarSrc}
-          alt="USTAD AI Assistant Avatar"
-          className="w-full h-full object-contain pointer-events-none transition-transform duration-200 group-hover:scale-110"
-        />
-
-        {/* Online Indicator Badge */}
-        <span className="absolute bottom-0.5 right-0.5 flex size-3">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-          <span className="relative inline-flex rounded-full size-3 bg-success border-2 border-card" />
-        </span>
+        {isOpen ? (
+          <X className="size-5.5" />
+        ) : (
+          <MessageSquare className="size-5.5" />
+        )}
       </button>
     </div>
   )
